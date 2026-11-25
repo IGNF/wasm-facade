@@ -25,10 +25,12 @@ user calls: a TypeScript facade, React hooks, a reference, and any target a plug
 </section>
 
 <figure class="fanout" aria-label="The Rust declarations of a small image-filter crate, and what wasm-facade generates from each">
-<figcaption>Point at a declaration in the Rust to see what it becomes.</figcaption>
+<figcaption>Point at a declaration in the Rust to see what it becomes. <code>#[wasm_bindgen]</code> stays as it is: the
+crate still compiles to wasm with wasm-bindgen, and wasm-facade's attributes, in amber, sit beside it.</figcaption>
 <div class="rust pane">
 <p class="file"><span class="dot rust-dot"></span>filters/src/lib.rs <em>written by hand</em></p>
 <pre><code><span data-k="edge"><i>#[cfg_attr(wasm_facade, api(union))]</i>
+<b class="wb">#[wasm_bindgen]</b>
 pub enum Edge { Clamp, Wrap }</span>
 
 <span data-k="options"><i>#[cfg_attr(wasm_facade, api(options))]</i>
@@ -40,11 +42,13 @@ pub struct BlurOptions {
 }</span>
 
 <span data-k="class"><i>#[cfg_attr(wasm_facade, api(class, options = "BlurOptions"))]</i>
+<b class="wb">#[wasm_bindgen]</b>
 impl Blur {</span>
     <span data-k="apply"><i>#[cfg_attr(wasm_facade, api(convert = "image=pixels"))]</i>
     pub fn apply(&amp;self, image: &amp;mut [u8], width: u32, height: u32)</span>
 
-    <span data-k="event"><i>#[cfg_attr(wasm_facade, api(event = "progress", payload = "number"))]</i>
+    <span data-k="event"><b class="wb">#[wasm_bindgen(js_name = onProgress)]</b>
+    <i>#[cfg_attr(wasm_facade, api(event = "progress", payload = "number"))]</i>
     pub fn on_progress(&amp;mut self, listener: js_sys::Function)</span>
 <span data-k="class">}</span></code></pre>
 </div>
