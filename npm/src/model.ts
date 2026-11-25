@@ -190,3 +190,64 @@ export const tsTypeOf = (api: Api, rust: string, types: Record<string, string> =
   if (declared) return declared.name;
   throw new Error(`wasm-facade: no TypeScript for the Rust type ${rust}: give it in wasm-facade.toml's [types]`);
 };
+
+// ── Rust's types in Python (the `python` target's; a project adds its own in `[targets.python.types]`)
+
+const INTEGERS = new Set(['u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'u64', 'i64', 'usize', 'isize']);
+
+/** A Rust type as a Python hint: `float`, `int`, `bool`, `str`, sequences, `X | None`, a declared enum's alias */
+export const pyTypeOf = (api: Api, rust: string, types: Record<string, string> = {}): string => {
+  const own = types[rust];
+
+  if (own) return own;
+
+  const ty = rust.replace(/^&(mut)?\s*/, '');
+  const option = /^Option<(.*)>$/.exec(ty);
+
+  if (option?.[1]) return `${pyTypeOf(api, option[1], types)} | None`;
+
+  const result = /^Result<(.*?), ?\w+>$/.exec(ty);
+
+  if (result?.[1]) return pyTypeOf(api, result[1], types);
+
+  const array = /^(?:\[(\w+)\]|Vec<(\w+)>|Box<\[(\w+)\]>)$/.exec(ty);
+  const element = array?.[1] ?? array?.[2] ?? array?.[3];
+
+  if (element === 'u8') return 'bytes | Sequence[int]';
+  if (element && INTEGERS.has(element)) return 'Sequence[int]';
+  if (element === 'f32' || element === 'f64') return 'Sequence[float]';
+  if (element === 'String') return 'Sequence[str]';
+  if (INTEGERS.has(ty)) return 'int';
+  if (ty === 'f32' || ty === 'f64') return 'float';
+  if (ty === 'bool') return 'bool';
+  if (ty === 'String' || ty === 'str') return 'str';
+  if (ty === 'JsValue') return 'Any';
+  if (ty === 'js_sys::Function' || ty === 'Function') return 'Callable[..., Any]';
+
+  const declared = enumOf(api, ty);
+
+  if (declared) return declared.name;
+  throw new Error(`wasm-facade: no Python for the Rust type ${rust}: give it in [targets.python.types]`);
+};
+
+/** A TypeScript literal (an option's `default`) in Python: numbers, strings, booleans, `undefined`/`null`; else none */
+export const pyLiteral = (ts: string): string | undefined => {
+  const value = ts.trim();
+
+  if (/^-?\d+(\.\d+)?(e-?\d+)?$/i.test(value)) return value;
+  if (value === 'true' || value === 'false') return value === 'true' ? 'True' : 'False';
+  if (value === 'undefined' || value === 'null') return 'None';
+
+  const string = /^'([^'\\]*)'$|^"([^"\\]*)"$/.exec(value);
+
+  return string ? JSON.stringify(string[1] ?? string[2]) : undefined;
+};
+
+/** Documentation as Python reads it: the API's names in code (`minZoom`, `setValues`) in snake_case, on one line */
+export const pyDoc = (doc: string): string =>
+  doc
+    .split('\n')
+    .join(' ')
+    .replace(/`([a-z]+[A-Z][A-Za-z0-9]*)`/g, (_, name: string) => `\`${snake(name)}\``)
+    .replaceAll('"""', "'''")
+    .replaceAll('\\', '\\\\');

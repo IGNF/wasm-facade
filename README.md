@@ -1,8 +1,8 @@
 # wasm-facade
 
-A public API declared **once, in Rust**, written as everything a JavaScript user needs: an idiomatic TypeScript facade
-over the crate's wasm-bindgen exports, React hooks, a Markdown reference, and any other binding a plugin adds (isard,
-its first user, adds a Python widget, React Native and a web component). Change the Rust, run `wasm-facade generate`, and
+A public API declared **once, in Rust**, written as every binding its users need: an idiomatic TypeScript facade over
+the crate's wasm-bindgen exports, React hooks, a web component's attributes and React Native's names over it, a Python
+API, their references in Markdown, and any other binding a plugin adds. Change the Rust, run `wasm-facade generate`, and
 every binding follows; `wasm-facade check` in CI fails on any drift.
 
 
@@ -136,7 +136,38 @@ own types in `[types]`.
 | `inputs` | none | files the plugins read besides their modules, in `generate`'s stamp |
 | `cache` | `node_modules/.cache/wasm-facade` | where `generate` keeps its stamp |
 | `[format]` | none | a formatter per extension, the text on its stdin (`".ts" = ["biome", "format", "--stdin-file-path={name}"]`) |
-| `[targets.<name>]` | | a target to run: built in (`typescript`, `react`, `reference`) or `plugin = "path.ts"` (or a package); `enabled = false` turns one off; the other keys are its options |
+| `[targets.<name>]` | | a target to run: built in (above) or `plugin = "path.ts"` (or a package); `enabled = false` turns one off; the other keys are its options |
+
+## Built-in targets
+
+The TypeScript facade is the one binding that calls the wasm module; the web's bindings are written over it. Python
+is a sibling, read from the same `api.json`:
+
+| Target | Writes (default `out`) | |
+| --- | --- | --- |
+| `typescript` | the facade (`src/api.ts`) | unions, options with defaults, functions, classes, events, converters |
+| `react` | hooks over the facade (`src/hooks.ts`; `facade`) | `useBlur(options)`, `useBlurEvent(blur, type, listener)` |
+| `web-component` | a custom element's attributes (`src/element.api.ts`; `from`, the structs, default the settings) | `ATTRIBUTES` (`'max-pitch'` → `maxPitch`, a number, a flag or text), `attributeValue(name, text)` |
+| `react-native` | the names a bridge exposes (`src/native.api.ts`) | each class's methods, properties and events, the functions, the settings' setters and getters |
+| `python` | the Python API (`python/_api.py`; `types`, `functions`) | `Literal` unions, `TypedDict` options with their defaults and keyword functions, a mixin per class, settings struct and the functions |
+| `reference` | the reference (`docs/api.md`; `title`) | |
+| `python-reference` | the Python reference (`docs/python.md`; `title`, `types`) | |
+
+The targets reading settings take `call_key`, the key naming their call (`call` by default).
+
+### Python: one API, its transport the project's
+
+The `python` target writes the API in Python's terms (`snake_case`, typed keywords, docstrings), and no runtime: each
+method hands its call, by the facade's name, to the class inheriting the mixin. That class gives the transport
+(`_call`, `_get`, `_set`, `_on`):
+
+```python
+class Blur(Widget, BlurApi):  # Widget: the project's, carrying each call to the TypeScript facade in a notebook
+    ...
+```
+
+A library drawing in a browser (a map in Jupyter) carries the calls to its TypeScript facade through a widget; a
+library computing could carry them to native code. The API generated is the same.
 
 ## Plugins
 
@@ -202,7 +233,9 @@ git.
 
 `examples/filters` is a repository of its own using wasm-facade: an image-filters crate (`filters/src/lib.rs`, every
 pattern above), its `wasm-facade.toml`, its converters, and what wasm-facade writes from them: `src/api.ts` (the facade),
-`src/hooks.ts` (`useBlur`, `useBlurEvent`), `docs/api.md`. `pkg/filters.d.ts` stands in for wasm-bindgen's output
+`src/hooks.ts` (`useBlur`, `useBlurEvent`), `src/element.api.ts`, `src/native.api.ts`, `python/filters/_api.py` (its
+Python, over a recording transport in `python/filters/__init__.py`, tested and typed strictly in CI), `docs/api.md`,
+`docs/python.md`. `pkg/filters.d.ts` stands in for wasm-bindgen's output
 so that the facade is type-checked without building the wasm module.
 
 ## Name

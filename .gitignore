@@ -10,3 +10,4 @@ Cargo.lock.bak
 
 # Local secrets (the crates.io token)
 .env
+__pycache__/

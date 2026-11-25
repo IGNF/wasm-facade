@@ -41,6 +41,11 @@ jobs:
       - run: bun install --frozen-lockfile
       # What the example's declarations make is what it holds
       - run: bun run example:check
+      # Its Python over a transport of its own: run, and typed strictly
+      - run: python3 test_filters.py
+        working-directory: examples/filters/python
+      - run: npx -y pyright@1.1.414
+        working-directory: examples/filters/python
 
   node:
     # The published package on Node, without Bun: the core's tests on a Node that strips types, then the built CLI
