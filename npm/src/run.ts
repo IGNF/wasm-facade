@@ -10,6 +10,7 @@ import { type Config, configOf } from './config.ts';
 import { extractorOf } from './extractor.ts';
 import { type Api, checkedApi } from './model.ts';
 import { apply } from './output.ts';
+import { pluginPath } from './plugin.ts';
 import { exec } from './process.ts';
 import { fresh, stamp } from './stamp.ts';
 import type { Context, Target } from './target.ts';
@@ -30,7 +31,7 @@ export const targetsOf = async (config: Config): Promise<{ target: Target; conte
   for (const [name, options] of enabled) {
     const plugin = options.plugin;
     const target = plugin
-      ? ((await import(pathToFileURL(join(config.root, plugin)).href)) as { default?: unknown }).default
+      ? ((await import(pathToFileURL(pluginPath(config.root, plugin)).href)) as { default?: unknown }).default
       : BUILT_IN[name];
 
     if (!isTarget(target))

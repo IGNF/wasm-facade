@@ -3,7 +3,7 @@
  * included) from its own folder */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -157,6 +157,25 @@ test("the extractor: the configuration's if given, the package's own of its vers
   assert.deepEqual(extractorOf(config), config.extractor);
   assert.equal(platformPackage('linux', 'arm64'), 'wasm-facade-linux-arm64');
   assert.ok(cached().endsWith(join('wasm-facade', VERSION)));
+});
+
+test('a plugin from a package the repository depends on', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'wasm-facade-'));
+  const pkg = join(dir, 'node_modules', 'wasm-facade-plugin-mine');
+
+  mkdirSync(pkg, { recursive: true });
+  writeFileSync(join(dir, 'package.json'), '{}');
+  writeFileSync(join(dir, 'wasm-facade.toml'), '[targets.mine]\nplugin = "wasm-facade-plugin-mine"\n');
+  writeFileSync(
+    join(pkg, 'package.json'),
+    '{ "name": "wasm-facade-plugin-mine", "type": "module", "main": "index.js" }',
+  );
+  writeFileSync(join(pkg, 'index.js'), "export default { name: 'mine', outputs: () => [] };\n");
+
+  const [loaded] = await targetsOf(configOf(dir));
+
+  assert.equal(loaded?.target.name, 'mine');
+  assert.ok(inputsOf(configOf(dir)).includes(join('node_modules', 'wasm-facade-plugin-mine', 'index.js')));
 });
 
 test('a region replaced between its markers, the rest kept', () => {
