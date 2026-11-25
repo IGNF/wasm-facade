@@ -1,4 +1,4 @@
-/** apigen's API for the plugins: the model, the generic patterns, the target interface, the regions and the runner */
+/** wasm-facade's API for the plugins: the model, the generic patterns, the target interface, the regions and the runner */
 export { type Config, configOf, rootOf, type TargetConfig } from './config.ts';
 export {
   type Api,

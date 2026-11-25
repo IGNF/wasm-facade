@@ -1,12 +1,12 @@
 {
-  "name": "apigen",
+  "name": "wasm-facade",
   "version": "0.1.0",
   "description": "A public API declared once in Rust, written as an idiomatic TypeScript facade over its wasm-bindgen exports, React hooks, a reference, and any binding a plugin adds",
   "license": "MIT",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://example.invalid/apigen.git",
+    "url": "https://example.invalid/wasm-facade.git",
     "directory": "npm"
   },
   "keywords": ["wasm", "wasm-bindgen", "rust", "typescript", "codegen", "bindings", "react"],
@@ -15,7 +15,7 @@
     "bun": ">=1.2"
   },
   "bin": {
-    "apigen": "./dist/cli.js"
+    "wasm-facade": "./dist/cli.js"
   },
   "exports": {
     ".": {

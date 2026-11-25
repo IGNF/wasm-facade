@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "api": "apigen generate",
-    "lint": "apigen check"
+    "api": "wasm-facade generate",
+    "lint": "wasm-facade check"
   }
 }

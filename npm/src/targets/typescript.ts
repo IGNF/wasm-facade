@@ -1,6 +1,6 @@
 /**
  * The TypeScript facade over the wasm-bindgen module (`[targets.typescript] out`, default `src/api.ts`; the module
- * `wasm` of apigen.toml): unions of strings for the enums, options with their defaults, functions and classes taking
+ * `wasm` of wasm-facade.toml): unions of strings for the enums, options with their defaults, functions and classes taking
  * them, their parameters through the project's converters, events as `on(type, listener)` returning what stops it
  */
 import { dirname, relative } from 'node:path';

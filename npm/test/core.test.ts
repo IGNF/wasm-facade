@@ -1,4 +1,4 @@
-/** apigen's core: Rust's types in TypeScript, the generic patterns, the configuration's defaults, the regions, the
+/** wasm-facade's core: Rust's types in TypeScript, the generic patterns, the configuration's defaults, the regions, the
  * built-in targets on the example repository's API; and the example repository checked end to end (extractor
  * included) from its own folder */
 import { describe, expect, test } from 'bun:test';
@@ -13,7 +13,7 @@ import { classes, converters, functions, options, unions } from '../src/patterns
 import { BUILT_IN } from '../src/run.ts';
 
 const repo = join(import.meta.dir, '../../examples/filters');
-const api = checkedApi(JSON.parse(readFileSync(join(repo, 'apigen/api.json'), 'utf8')));
+const api = checkedApi(JSON.parse(readFileSync(join(repo, 'wasm-facade/api.json'), 'utf8')));
 
 describe("Rust's types in TypeScript", () => {
   test('numbers, strings, slices as typed arrays, Option, Result, the enums declared, the project’s own', () => {
@@ -26,7 +26,7 @@ describe("Rust's types in TypeScript", () => {
     expect(tsTypeOf(api, 'Rgba', { Rgba: '[number, number, number, number]' })).toBe(
       '[number, number, number, number]',
     );
-    expect(() => tsTypeOf(api, 'HashMap<u8, u8>')).toThrow("apigen.toml's [types]");
+    expect(() => tsTypeOf(api, 'HashMap<u8, u8>')).toThrow("wasm-facade.toml's [types]");
   });
 
   test('an api.json of another schema is refused', () => {
@@ -61,15 +61,15 @@ describe('the generic patterns', () => {
 });
 
 test("the configuration's defaults where its file says nothing", () => {
-  const dir = mkdtempSync(join(tmpdir(), 'apigen-'));
+  const dir = mkdtempSync(join(tmpdir(), 'wasm-facade-'));
 
-  writeFileSync(join(dir, 'apigen.toml'), '[targets.typescript]\n');
+  writeFileSync(join(dir, 'wasm-facade.toml'), '[targets.typescript]\n');
 
   const config = configOf(dir);
 
-  expect(config.extractor).toEqual(['apigen']);
-  expect(config.api).toBe('apigen/api.json');
-  expect(config.extract).toEqual({ out: 'apigen/api.json' });
+  expect(config.extractor).toEqual(['wasm-facade']);
+  expect(config.api).toBe('wasm-facade/api.json');
+  expect(config.extract).toEqual({ out: 'wasm-facade/api.json' });
   expect(Object.keys(config.targets)).toEqual(['typescript']);
 });
 
@@ -89,7 +89,7 @@ test('the built-in targets are the example repository’s files, once formatted'
   expect(written).toEqual(['src/api.ts', 'src/hooks.ts', 'docs/api.md']);
 });
 
-test('the example repository, a repository of its own, is as its declarations make it (apigen check)', async () => {
+test('the example repository, a repository of its own, is as its declarations make it (wasm-facade check)', async () => {
   const result = await $`bun ${join(import.meta.dir, '../src/cli.ts')} check`
     .cwd(join(repo, 'filters'))
     .nothrow()

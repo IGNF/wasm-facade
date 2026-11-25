@@ -1,5 +1,5 @@
 {
-  "$comment": "Made by `apigen extract` from the workspace's declarations and the calls they name: not to edit",
+  "$comment": "Made by `wasm-facade extract` from the workspace's declarations and the calls they name: not to edit",
   "calls": {},
   "items": [
     {

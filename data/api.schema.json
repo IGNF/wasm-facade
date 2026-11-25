@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/apigen/data/api.schema.json",
-  "title": "apigen's API file, schema 1",
-  "description": "A public API declared in Rust, as `apigen extract` writes it: the declared items (the structs, enums, functions and impl blocks carrying the configured inert attribute), and the calls they name among the exported classes' methods. Version 1; a change that a reader of version 1 cannot read raises `schema`.",
+  "$id": "https://example.invalid/wasm-facade/data/api.schema.json",
+  "title": "wasm-facade's API file, schema 1",
+  "description": "A public API declared in Rust, as `wasm-facade extract` writes it: the declared items (the structs, enums, functions and impl blocks carrying the configured inert attribute), and the calls they name among the exported classes' methods. Version 1; a change that a reader of version 1 cannot read raises `schema`.",
   "type": "object",
   "required": ["schema", "items", "calls"],
   "properties": {

@@ -12,7 +12,7 @@ export const region = (file: string, name: string, text: string, comment: '//' |
   const start = file.indexOf(open);
   const end = file.indexOf(close);
 
-  if (start < 0 || end < start) throw new Error(`apigen: no region ${open} … ${close}`);
+  if (start < 0 || end < start) throw new Error(`wasm-facade: no region ${open} … ${close}`);
 
   const head = file.slice(0, file.indexOf('\n', start) + 1);
   const tail = file.slice(file.lastIndexOf('\n', end));

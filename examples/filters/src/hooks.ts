@@ -1,4 +1,4 @@
-// Made by apigen (react) from the Rust declarations: not to edit
+// Made by wasm-facade (react) from the Rust declarations: not to edit
 
 import { useEffect, useMemo } from 'react';
 import { Blur, type BlurEvents, type BlurOptionsInit } from './api.ts';

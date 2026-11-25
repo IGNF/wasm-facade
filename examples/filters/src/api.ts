@@ -1,4 +1,4 @@
-// Made by apigen (typescript) from the Rust declarations: not to edit
+// Made by wasm-facade (typescript) from the Rust declarations: not to edit
 
 import * as wasm from '../pkg/filters.js';
 import * as convert from './converters.ts';

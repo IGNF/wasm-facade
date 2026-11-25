@@ -19,10 +19,8 @@ do is to run them here.
 
 ## 2. Name
 
-`apigen` is taken on crates.io and npm. Free on both on 2026-11-24: `wasm-facade`, `wasmfacade`, `rustfacade`,
-`rsfacade`, `tsfacade`, `facadegen`, `wasm-api-gen`, `wasm-surface`, `bindfront`. Renaming touches: `Cargo.toml`
-(`name`, the `[[bin]]`), `npm/package.json` (`name`, `bin`), the default `extractor` (`npm/src/config.ts`), the
-default cfg `apigen` (`src/lib.rs`, the README, the example's `check-cfg`), the README.
+`wasm-facade`, chosen on 2026-11-25 (free on crates.io and npm that day; check again just before publishing:
+`cargo search wasm-facade`, `npm view wasm-facade`). The working name `apigen` is taken on both.
 
 ## 3. Bun-only APIs → Node
 

@@ -1,6 +1,6 @@
 /**
  * The plugin API: a target writes one binding from the API. Built in: `typescript` (the facade), `react` (hooks),
- * `reference` (markdown). A project's own are modules whose default export is a `Target`, named in `apigen.toml`
+ * `reference` (markdown). A project's own are modules whose default export is a `Target`, named in `wasm-facade.toml`
  * (`[targets.<name>] plugin = "…"`). A target reads the API through patterns (pure functions of the API, importable
  * by any target: `patterns.ts`); no target imports another.
  */

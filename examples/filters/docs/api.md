@@ -1,6 +1,6 @@
 # filters
 
-<!-- Made by apigen (reference) from the Rust declarations: not to edit -->
+<!-- Made by wasm-facade (reference) from the Rust declarations: not to edit -->
 
 ## Functions
 

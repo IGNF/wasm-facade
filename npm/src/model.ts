@@ -68,14 +68,14 @@ export const SCHEMA = 1;
 export const checkedApi = (json: unknown): Api => {
   const api = json as Api;
 
-  if (api?.schema !== SCHEMA) throw new Error(`apigen: api.json's schema ${String(api?.schema)}, ${SCHEMA} expected`);
+  if (api?.schema !== SCHEMA) throw new Error(`wasm-facade: api.json's schema ${String(api?.schema)}, ${SCHEMA} expected`);
 
   return api;
 };
 
 /** What a file a built-in target writes says it is */
 export const HEADER_OF = (target: string): string =>
-  `Made by apigen (${target}) from the Rust declarations: not to edit`;
+  `Made by wasm-facade (${target}) from the Rust declarations: not to edit`;
 
 // ── Names
 
@@ -99,7 +99,7 @@ export const text = (value: Attributes[string]): string | undefined => (typeof v
 export const structOf = (api: Api, name: string): Declared => {
   const found = api.items.find((item) => item.name === name && item.kind === 'struct');
 
-  if (!found?.fields) throw new Error(`apigen: no declared struct ${name}`);
+  if (!found?.fields) throw new Error(`wasm-facade: no declared struct ${name}`);
 
   return found;
 };
@@ -187,5 +187,5 @@ export const tsTypeOf = (api: Api, rust: string, types: Record<string, string> =
   const declared = enumOf(api, ty);
 
   if (declared) return declared.name;
-  throw new Error(`apigen: no TypeScript for the Rust type ${rust}: give it in apigen.toml's [types]`);
+  throw new Error(`wasm-facade: no TypeScript for the Rust type ${rust}: give it in wasm-facade.toml's [types]`);
 };

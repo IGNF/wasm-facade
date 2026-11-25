@@ -1,5 +1,5 @@
-# A conventional repository: the defaults but the extractor (here built from apigen's sources at the root;
-# `apigen` once installed), the converters and the wasm module
+# A conventional repository: the defaults but the extractor (here built from wasm-facade's sources at the root;
+# `wasm-facade` once installed), the converters and the wasm module
 
 extractor = ["cargo", "run", "-q", "--manifest-path", "../../Cargo.toml", "--"]
 converters = "src/converters.ts"

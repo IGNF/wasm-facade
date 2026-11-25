@@ -1,5 +1,5 @@
 /**
- * `generate` and `check`: the extractor run in the repository (`extractor` of apigen.toml, its `[extract]` given as
+ * `generate` and `check`: the extractor run in the repository (`extractor` of wasm-facade.toml, its `[extract]` given as
  * JSON), its API read, each enabled target loaded by name (built in, or its `plugin` module) and its outputs written,
  * then the targets' commands. `check` writes nothing and lists what is not what the declarations make.
  */
@@ -32,7 +32,7 @@ export const targetsOf = async (config: Config): Promise<{ target: Target; conte
 
     if (!isTarget(target))
       throw new Error(
-        `apigen: the target ${name}: no ${plugin ? `default export Target in ${plugin}` : 'built-in target of that name'}`,
+        `wasm-facade: the target ${name}: no ${plugin ? `default export Target in ${plugin}` : 'built-in target of that name'}`,
       );
     loaded.push({ target, context: { config, options } });
   }

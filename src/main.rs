@@ -1,8 +1,8 @@
-//! `apigen extract`: the API declared in the workspace around the current folder read into its JSON file. Its
-//! configuration is the `[extract]` table of `apigen.toml`, given as JSON by the `apigen` package's CLI (`--config`),
+//! `wasm-facade extract`: the API declared in the workspace around the current folder read into its JSON file. Its
+//! configuration is the `[extract]` table of `wasm-facade.toml`, given as JSON by the `wasm-facade` package's CLI (`--config`),
 //! or the defaults.
 //!
-//!   apigen extract [--check] [--config <json>]
+//!   wasm-facade extract [--check] [--config <json>]
 
 use std::process::ExitCode;
 
@@ -14,16 +14,16 @@ fn main() -> ExitCode {
         .position(|a| a == "--config")
         .and_then(|i| args.get(i + 1))
         .map_or_else(
-            || Ok(apigen::Config::default()),
+            || Ok(wasm_facade::Config::default()),
             |json| {
                 serde_json::from_str(json)
                     .map_err(|e| format!("--config: {e}"))
-                    .and_then(|value| apigen::Config::from_json(&value))
+                    .and_then(|value| wasm_facade::Config::from_json(&value))
             },
         );
     let result = match args.first().map(String::as_str) {
-        Some("extract") => config.and_then(|config| apigen::run(&config, check)),
-        _ => Err("usage: apigen extract [--check] [--config <json>]".into()),
+        Some("extract") => config.and_then(|config| wasm_facade::run(&config, check)),
+        _ => Err("usage: wasm-facade extract [--check] [--config <json>]".into()),
     };
 
     match result {
@@ -33,7 +33,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("apigen: {error}");
+            eprintln!("wasm-facade: {error}");
 
             ExitCode::FAILURE
         }

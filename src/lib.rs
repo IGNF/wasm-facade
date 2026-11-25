@@ -1,5 +1,5 @@
-//! apigen: a public API declared once in Rust, read into a JSON file (`data/api.schema.json`, versioned) from which the
-//! `apigen` package (TypeScript) writes the bindings: an idiomatic TypeScript facade over the wasm-bindgen exports, its
+//! wasm-facade: a public API declared once in Rust, read into a JSON file (`data/api.schema.json`, versioned) from which the
+//! `wasm-facade` package (TypeScript) writes the bindings: an idiomatic TypeScript facade over the wasm-bindgen exports, its
 //! framework bindings, its reference. No project is known here: what is read is the configuration's ([`Config`]).
 //!
 //! The declarations are the items carrying `#[cfg_attr(<cfg>, <attribute>(…))]`, a cfg never set: the attribute is
@@ -35,7 +35,7 @@ pub const SCHEMA: u32 = 1;
 /// default, so that a project following the conventions gives almost nothing
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// The cfg guarding the declarations' attribute (default `apigen`): never set
+    /// The cfg guarding the declarations' attribute (default `wasm_facade`): never set
     pub cfg: String,
     /// The attribute inside (default `api`)
     pub attribute: String,
@@ -49,27 +49,27 @@ pub struct Config {
     pub call_keys: Vec<String>,
     /// The members read, their folders from the workspace's root (default all of the workspace's)
     pub members: Option<Vec<String>>,
-    /// The file written, from the workspace's root (default `apigen/api.json`)
+    /// The file written, from the workspace's root (default `wasm-facade/api.json`)
     pub out: String,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            cfg: "apigen".into(),
+            cfg: "wasm_facade".into(),
             attribute: "api".into(),
             exported: Vec::new(),
             export_attribute: "wasm_bindgen".into(),
             export_name: "js_name".into(),
             call_keys: vec!["call".into()],
             members: None,
-            out: "apigen/api.json".into(),
+            out: "wasm-facade/api.json".into(),
         }
     }
 }
 
 impl Config {
-    /// The defaults, those keys of `json` (the `[extract]` table of `apigen.toml`, as JSON) over them
+    /// The defaults, those keys of `json` (the `[extract]` table of `wasm-facade.toml`, as JSON) over them
     ///
     /// # Errors
     ///
@@ -177,7 +177,7 @@ pub fn api(config: &Config, root: &Path, files: &[(PathBuf, syn::File)]) -> Resu
     }
 
     Ok(json!({
-        "$comment": "Made by `apigen extract` from the workspace's declarations and the calls they name: not to edit",
+        "$comment": "Made by `wasm-facade extract` from the workspace's declarations and the calls they name: not to edit",
         "schema": SCHEMA,
         "items": declared,
         "calls": calls,
@@ -240,7 +240,7 @@ pub fn run(config: &Config, check: bool) -> Result<String, String> {
             Ok(format!("{name}: as the declarations make it"))
         } else {
             Err(format!(
-                "{name} is not the one the declarations make: run `apigen generate`"
+                "{name} is not the one the declarations make: run `wasm-facade generate`"
             ))
         };
     }

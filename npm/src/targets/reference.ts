@@ -68,7 +68,7 @@ export const reference: Target = {
     const text = [
       `# ${option(own, 'title', 'API')}`,
       '',
-      '<!-- Made by apigen (reference) from the Rust declarations: not to edit -->',
+      '<!-- Made by wasm-facade (reference) from the Rust declarations: not to edit -->',
       '',
       ...(fns.length
         ? ['## Functions', '', ...fns.map((f) => `- ${signature(api, config, f)}: ${line(f.doc)}`), '']

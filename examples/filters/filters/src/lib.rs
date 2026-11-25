@@ -1,10 +1,10 @@
-//! Image filters for the web: the example of a project using apigen. Its public API is declared here, once: apigen
+//! Image filters for the web: the example of a project using wasm-facade. Its public API is declared here, once: wasm-facade
 //! writes its TypeScript facade, its React hooks and its reference from these declarations.
 
 use wasm_bindgen::prelude::*;
 
 /// How a filter reads past the image's edges
-#[cfg_attr(apigen, api(union))]
+#[cfg_attr(wasm_facade, api(union))]
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
 pub enum Edge {
@@ -15,13 +15,13 @@ pub enum Edge {
 }
 
 /// A blur's options
-#[cfg_attr(apigen, api(options))]
+#[cfg_attr(wasm_facade, api(options))]
 pub struct BlurOptions {
     /// Its radius, pixels
-    #[cfg_attr(apigen, api(default = "2"))]
+    #[cfg_attr(wasm_facade, api(default = "2"))]
     pub radius: f64,
     /// How it reads past the edges
-    #[cfg_attr(apigen, api(default = "'clamp'"))]
+    #[cfg_attr(wasm_facade, api(default = "'clamp'"))]
     pub edge: Edge,
 }
 
@@ -34,7 +34,7 @@ pub struct Blur {
 }
 
 /// A box blur, applied to RGBA pixels in place
-#[cfg_attr(apigen, api(class, options = "BlurOptions"))]
+#[cfg_attr(wasm_facade, api(class, options = "BlurOptions"))]
 #[wasm_bindgen]
 impl Blur {
     /// A blur of this radius and edges
@@ -56,7 +56,7 @@ impl Blur {
     }
 
     /// Blurs an image in place
-    #[cfg_attr(apigen, api(convert = "image=pixels"))]
+    #[cfg_attr(wasm_facade, api(convert = "image=pixels"))]
     pub fn apply(&self, image: &mut [u8], width: u32, height: u32) {
         let _ = (image, width, height, self.edge);
     }
@@ -71,21 +71,21 @@ impl Blur {
 
     /// Blurs the rows a predicate keeps
     #[wasm_bindgen(js_name = applyWhere)]
-    #[cfg_attr(apigen, api(callback = "(row: number) => boolean"))]
+    #[cfg_attr(wasm_facade, api(callback = "(row: number) => boolean"))]
     pub fn apply_where(&self, image: &mut [u8], width: u32, keep: &js_sys::Function) {
         let _ = (image, width, keep);
     }
 
     /// The share of the image blurred, 0 to 1
     #[wasm_bindgen(js_name = onProgress)]
-    #[cfg_attr(apigen, api(event = "progress", payload = "number"))]
+    #[cfg_attr(wasm_facade, api(event = "progress", payload = "number"))]
     pub fn on_progress(&mut self, listener: js_sys::Function) {
         self.progress = Some(listener);
     }
 }
 
 /// The histogram of an image's luminance: 256 counts
-#[cfg_attr(apigen, api(function, convert = "image=pixels"))]
+#[cfg_attr(wasm_facade, api(function, convert = "image=pixels"))]
 #[wasm_bindgen]
 pub fn histogram(image: &[u8]) -> Vec<u32> {
     let mut counts = vec![0; 256];
