@@ -1,3 +1,20 @@
+/* The fonts, served beside the pages (OFL, their licences in fonts/) */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("fonts/bricolage-grotesque.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url("fonts/jetbrains-mono.woff2") format("woff2-variations");
+}
+
 /* Two colours carry the page: amber for the Rust written by hand, violet for what wasm-facade writes */
 :root {
   color-scheme: light dark;

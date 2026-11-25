@@ -28,11 +28,6 @@ const read = (path: string) => readFileSync(join(root, path), 'utf8');
 
 const repository = process.argv.find((arg) => arg.startsWith('--repository='))?.slice('--repository='.length);
 const menu = repository ? `<a href="${repository}">Repository</a>` : '';
-const fonts = [
-  '<link rel="preconnect" href="https://fonts.googleapis.com">',
-  '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
-  '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..700&family=JetBrains+Mono:wght@400;600;700&display=swap">',
-].join('\n');
 
 // The wasm-bindgen CLI must be the version of the crate the example locks, or the module does not load
 const locked = /name = "wasm-bindgen"\nversion = "([^"]+)"/.exec(read('examples/filters/Cargo.lock'))?.[1];
@@ -130,7 +125,7 @@ const reference = (html: string) => {
 };
 
 const page = (from: string, to: string, fill: Record<string, string> = {}) => {
-  const filled = Object.entries({ repository: menu, fonts, ...fill }).reduce(
+  const filled = Object.entries({ repository: menu, ...fill }).reduce(
     (html, [key, value]) => html.replace(`<!--${key}-->`, () => value),
     read(from),
   );
@@ -141,6 +136,20 @@ const page = (from: string, to: string, fill: Record<string, string> = {}) => {
 
 page('site/index.html', 'index.html');
 copyFileSync(join(root, 'site/style.css'), join(out, 'style.css'));
+
+// The fonts served by the site itself, not by a font service: a visitor's address goes to no third party
+const fonts = {
+  'bricolage-grotesque': '@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-opsz-normal.woff2',
+  'jetbrains-mono': '@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2',
+};
+
+mkdirSync(join(out, 'fonts'));
+Object.entries(fonts).forEach(([name, file]) => {
+  const from = join(root, 'node_modules', file);
+
+  copyFileSync(from, join(out, 'fonts', `${name}.woff2`));
+  copyFileSync(join(from, '../../LICENSE'), join(out, 'fonts', `${name}-OFL.txt`));
+});
 
 // The demo: the files it shows embedded (`</` escaped: they sit in a script element)
 const files = {
