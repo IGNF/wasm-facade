@@ -7,8 +7,10 @@
 import type { Config, TargetConfig } from './config.ts';
 import type { Api } from './model.ts';
 
-/** What a target writes: a whole file, or the region of a file between its markers (`// <api:name>` … `// </api:name>`,
- * `#` in Python), formatted by the configuration's formatter for its extension */
+/** What a target writes, formatted by the configuration's formatter for its extension: a whole file (the default, that
+ * a repository may leave out of git; hand-written code extends it: a base class, an interface, spread constants), or
+ * with `region` the lines of a hand-written file between its markers (`// <api:name>` … `// </api:name>`, `#` in
+ * Python) */
 export interface Output {
   path: string;
   region?: string;
