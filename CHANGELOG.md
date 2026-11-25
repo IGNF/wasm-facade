@@ -14,6 +14,9 @@
   dependency (`wasm-facade-<os>-<cpu>`, published by the release workflow on a tag), else `cargo install` of the same
   version once in `~/.cache/wasm-facade` (`WASM_FACADE_CACHE`). `extractor` in `wasm-facade.toml` only overrides it.
 
+- A plugin may be a package the repository depends on (`plugin = "wasm-facade-plugin-foo"`), resolved from its root,
+  as well as a module of the repository.
+
 ### Changed
 
 - The CLI runs on Node 20+ as on Bun (#4): `#!/usr/bin/env node`, TOML read by `smol-toml`, commands run by

@@ -135,7 +135,7 @@ own types in `[types]`.
 | `inputs` | none | files the plugins read besides their modules, in `generate`'s stamp |
 | `cache` | `node_modules/.cache/wasm-facade` | where `generate` keeps its stamp |
 | `[format]` | none | a formatter per extension, the text on its stdin (`".ts" = ["biome", "format", "--stdin-file-path={name}"]`) |
-| `[targets.<name>]` | | a target to run: built in (`typescript`, `react`, `reference`) or `plugin = "path.ts"`; `enabled = false` turns one off; the other keys are its options |
+| `[targets.<name>]` | | a target to run: built in (`typescript`, `react`, `reference`) or `plugin = "path.ts"` (or a package); `enabled = false` turns one off; the other keys are its options |
 
 ## Plugins
 
@@ -154,6 +154,10 @@ const target: Target = {
 
 export default target;
 ```
+
+`plugin` names a module of the repository (`"scripts/my-binding.ts"`, from the root) or a package it depends on
+(`"wasm-facade-plugin-foo"`, or one of its exports), resolved from the root as an import is: a plugin is written in the
+repository that uses it, or published and shared.
 
 A plugin may be written in TypeScript: Bun and Node 23.6+ load it as it is; on Node 20 to 23.5, run the CLI with
 `node --experimental-strip-types` (22.6+) or through a loader (`npx tsx node_modules/wasm-facade/dist/cli.js generate`),
