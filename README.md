@@ -29,10 +29,10 @@ anyone maintaining it by hand.
 
 ```sh
 cargo install wasm-facade --version 0.1.0 --locked   # the extractor: `wasm-facade extract`
-bun add -d wasm-facade@0.1.0                         # the generator: `bunx wasm-facade generate`
+npm install -D wasm-facade@0.1.0                     # the generator: `npx wasm-facade generate` (or bun, pnpm, yarn)
 ```
 
-The generator runs on Bun for now (Node: #4); the npm package will bring its extractor (#3).
+The generator runs on Node 20+ and on Bun; the npm package will bring its extractor (#3).
 
 ## What a repository does
 
@@ -121,6 +121,10 @@ const target: Target = {
 
 export default target;
 ```
+
+A plugin may be written in TypeScript: Bun and Node 23.6+ load it as it is; on Node 20 to 23.5, run the CLI with
+`node --experimental-strip-types` (22.6+) or through a loader (`npx tsx node_modules/wasm-facade/dist/cli.js generate`),
+or write the plugin in JavaScript.
 
 `outputs` returns whole files or regions of hand-written files (the lines between `// <api:name>` and
 `// </api:name>`, `#` in Python). A target reads the API through the patterns (`classes`, `functions`, `options`,

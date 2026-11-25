@@ -42,14 +42,18 @@
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test",
+    "test:node": "node --experimental-strip-types --no-warnings --test test/*.test.ts",
     "lint": "biome check .",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",
-    "@types/bun": "^1.4.4",
+    "@types/node": "^22.0.0",
     "@types/react": "^19.1.0",
     "react": "^19.3.1",
     "typescript": "~6.0.2"
+  },
+  "dependencies": {
+    "smol-toml": "^1.9.1"
   }
 }

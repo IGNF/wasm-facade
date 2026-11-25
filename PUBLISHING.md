@@ -22,7 +22,7 @@ do is to run them here.
 `wasm-facade`, chosen on 2026-11-25 (free on crates.io and npm that day; check again just before publishing:
 `cargo search wasm-facade`, `npm view wasm-facade`). The working name `apigen` is taken on both.
 
-## 3. Bun-only APIs → Node
+## 3. Bun-only APIs → Node (done: #4)
 
 | Where | Bun API | Node replacement |
 | --- | --- | --- |

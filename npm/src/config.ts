@@ -26,6 +26,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { parse } from 'smol-toml';
 
 export interface TargetConfig {
   /** A local plugin's module, from the root (built-in targets have none) */
@@ -65,7 +66,7 @@ const strings = (value: unknown, fallback: string[]): string[] =>
 
 /** The configuration of the repository at `root`: its file over the defaults */
 export const configOf = (root: string): Config => {
-  const file = record<unknown>(Bun.TOML.parse(readFileSync(join(root, FILE), 'utf8')));
+  const file = record<unknown>(parse(readFileSync(join(root, FILE), 'utf8')));
   const extract = record<unknown>(file.extract);
   const given = typeof file.api === 'string' ? file.api : 'wasm-facade/api.json';
   const api = typeof extract.out === 'string' ? extract.out : given;
