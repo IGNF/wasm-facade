@@ -4,9 +4,10 @@
  * `cache` (default `node_modules/.cache/wasm-facade`). The same inputs and the files as written: nothing to do.
  */
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import type { Config } from './config.ts';
+import { pluginPath } from './plugin.ts';
 import { VERSION } from './version.ts';
 
 const hash = (text: string): string => createHash('sha256').update(text).digest('hex');
@@ -41,7 +42,7 @@ export const modulesOf = (entry: string): string[] => {
 export const inputsOf = (config: Config): string[] => {
   const plugins = Object.values(config.targets)
     .filter((t) => t.enabled !== false && typeof t.plugin === 'string')
-    .flatMap((t) => modulesOf(join(config.root, t.plugin as string)));
+    .flatMap((t) => modulesOf(pluginPath(config.root, t.plugin as string)));
   const files = [
     join(config.root, 'wasm-facade.toml'),
     join(config.root, config.api),
@@ -49,7 +50,11 @@ export const inputsOf = (config: Config): string[] => {
     ...config.inputs.map((p) => join(config.root, p)),
   ];
 
-  return [...new Set(files)].map((p) => relative(config.root, p));
+  // Compared as real paths: a package's module is resolved through its links (macOS's /var is /private/var)
+  const real = (p: string) => (existsSync(p) ? realpathSync(p) : p);
+  const root = real(config.root);
+
+  return [...new Set(files.map((p) => relative(root, real(p))))];
 };
 
 interface Stamp {
