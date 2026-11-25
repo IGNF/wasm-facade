@@ -11,7 +11,7 @@ import { configOf } from '../src/config.ts';
 import { cached, extractorOf, platformPackage } from '../src/extractor.ts';
 import { checkedApi, tsTypeOf } from '../src/model.ts';
 import { region } from '../src/output.ts';
-import { classes, converters, functions, options, unions } from '../src/patterns.ts';
+import { classes, converters, functions, options, settingCalls, settings, unions } from '../src/patterns.ts';
 import { BUILT_IN, targetsOf } from '../src/run.ts';
 import { fresh, inputsOf, stamp } from '../src/stamp.ts';
 import { VERSION } from '../src/version.ts';
@@ -94,6 +94,48 @@ describe('the generic patterns', () => {
       [['progress', 'number']],
     );
   });
+});
+
+test('settings: a setter, a getter where kept, the call applying it, the settings it takes together', () => {
+  const field = (name: string, keys: Record<string, string | boolean>) => ({ name, type: 'f64', doc: '', api: keys });
+  const host = checkedApi({
+    schema: 1,
+    calls: { setRange: { doc: '', params: [] }, setTilt: { doc: '', params: [] } },
+    items: [
+      {
+        kind: 'struct',
+        name: 'ViewSettings',
+        doc: '',
+        api: { settings: true },
+        fields: [
+          field('min_zoom', { call: 'setRange', spread: 'range', store: 'range[0]', getter: true, default: '0' }),
+          field('max_zoom', { call: 'setRange', spread: 'range', store: 'range[1]', getter: true }),
+          field('tilt', { call: 'setTilt' }),
+        ],
+      },
+    ],
+  });
+  const all = settings(host);
+
+  assert.deepEqual(
+    all.map((s) => [s.setter, s.getter, s.store, s.call, s.default]),
+    [
+      ['setMinZoom', 'getMinZoom', 'range[0]', 'setRange', '0'],
+      ['setMaxZoom', 'getMaxZoom', 'range[1]', 'setRange', undefined],
+      ['setTilt', undefined, 'tilt', 'setTilt', undefined],
+    ],
+  );
+  assert.deepEqual(
+    settingCalls(all).map((g) => [g.call, g.settings.map((s) => s.name)]),
+    [
+      ['setRange', ['minZoom', 'maxZoom']],
+      ['setTilt', ['tilt']],
+    ],
+  );
+  assert.throws(
+    () => settings(host, { callKey: 'engine' }),
+    (e: Error) => e.message.includes('names no call'),
+  );
 });
 
 test("the configuration's defaults where its file says nothing", () => {

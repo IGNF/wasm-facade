@@ -9,10 +9,15 @@
  *   from those options by name): its constructor, getters and setters (wasm-bindgen's flags), methods (async ones
  *   returning a promise), events (a method with `event = "<name>"` and `payload = "<TypeScript type>"`, taking the
  *   listener), callbacks (a `js_sys::Function` parameter typed by `callback = "<TypeScript type>"`)
+ * - settings: a struct with `api(settings)`, each field a setting of a host class: a setter storing the value and
+ *   making the exported call that applies it (`call = "<method>"`, the key named by `callKey`), a getter where the
+ *   host keeps the value as given (`getter`), where it keeps it (`store`, its name by default), the settings the call
+ *   takes together (`spread = "<group>"`: every setting of the group passed at once), the converter of the value
+ *   (`convert`), its default (`default`, a TypeScript literal): the option re-applied when the host's options change
  * - converters: a function's or a method's `convert = "<param>=<converter>, …"` passes that parameter through the
  *   project's converter (its type the converter's parameter's), `result = "<converter>"` its result
  */
-import { type Api, camel, type Declared, type Signature, text, upperFirst } from './model.ts';
+import { type Api, type Call, camel, type Declared, type Field, type Signature, text, upperFirst } from './model.ts';
 
 export interface Union {
   name: string;
@@ -107,6 +112,67 @@ export const classes = (api: Api): Class[] =>
         .map((m) => ({ name: text(m.api.event) ?? '', method: m, payload: text(m.api.payload) ?? 'unknown' })),
     };
   });
+
+export interface Setting {
+  /** The struct declaring it, and its field */
+  struct: string;
+  field: Field;
+  /** Its name in TypeScript (`maxPitch`), its setter's and getter's (`setMaxPitch`, `getMaxPitch`) */
+  name: string;
+  setter: string;
+  getter: string | undefined;
+  /** Where the host keeps it (`maxPitch`, `zoomRange[0]`) */
+  store: string;
+  /** The exported call applying it, and its signature */
+  call: string;
+  signature: Call;
+  /** The group of settings the call takes together, if any */
+  spread: string | undefined;
+  /** The converter of the value, its default */
+  convert: string | undefined;
+  default: string | undefined;
+}
+
+/** The settings declared (`api(settings)` structs), each field's call named by `callKey` (default `call`) */
+export const settings = (api: Api, { callKey = 'call' }: { callKey?: string } = {}): Setting[] =>
+  by(api, 'struct', 'settings').flatMap((s) =>
+    (s.fields ?? []).map((field) => {
+      const name = camel(field.name);
+      const call = text(field.api[callKey]);
+      const signature = call ? api.calls[call] : undefined;
+
+      if (!call) throw new Error(`wasm-facade: the setting ${s.name}.${field.name} names no call (${callKey} = "…")`);
+      if (!signature) throw new Error(`wasm-facade: the setting ${s.name}.${field.name}: no exported call ${call}`);
+
+      return {
+        struct: s.name,
+        field,
+        name,
+        setter: `set${upperFirst(name)}`,
+        getter: field.api.getter ? `get${upperFirst(name)}` : undefined,
+        store: text(field.api.store) ?? name,
+        call,
+        signature,
+        spread: text(field.api.spread),
+        convert: text(field.api.convert),
+        default: text(field.api.default),
+      };
+    }),
+  );
+
+/** The settings by their call: those of a `spread` group together, the others alone, in their order */
+export const settingCalls = (all: Setting[]): { call: string; spread: string | undefined; settings: Setting[] }[] => {
+  const groups: { call: string; spread: string | undefined; settings: Setting[] }[] = [];
+
+  for (const setting of all) {
+    const group = setting.spread && groups.find((g) => g.spread === setting.spread && g.call === setting.call);
+
+    if (group) group.settings.push(setting);
+    else groups.push({ call: setting.call, spread: setting.spread, settings: [setting] });
+  }
+
+  return groups;
+};
 
 /** A function's or a method's converters: parameter → converter (`convert = "pixels=imageData, …"`) */
 export const converters = (sig: { api: Declared['api'] }): Record<string, string> =>
