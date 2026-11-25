@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Generated on build (#2): `generate` is incremental (a stamp of its inputs and of the files it wrote, in `cache`:
+  nothing written nor formatted when nothing changed), `--no-extract` reads the committed `api.json` without the
+  extractor (an install's `postinstall`), `--watch` generates again on a change of the Rust, the configuration or a
+  plugin, `--force` runs every target. `inputs` in `wasm-facade.toml` names the files the plugins read. The README
+  explains the setup: `api.json` committed, the outputs in `.gitignore`, `generate` in the build.
+
 ### Changed
 
 - The CLI runs on Node 20+ as on Bun (#4): `#!/usr/bin/env node`, TOML read by `smol-toml`, commands run by

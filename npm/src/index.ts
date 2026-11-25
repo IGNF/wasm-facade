@@ -40,5 +40,6 @@ export {
   type Union,
   unions,
 } from './patterns.ts';
-export { extract, type Report, run, targetsOf } from './run.ts';
+export { extract, type Report, type RunOptions, readApi, run, targetsOf } from './run.ts';
+export { fresh, inputsOf, modulesOf, stamp } from './stamp.ts';
 export { type Context, type Output, option, type Target } from './target.ts';

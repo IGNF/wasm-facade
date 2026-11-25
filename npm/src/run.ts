@@ -10,6 +10,7 @@ import { type Config, configOf } from './config.ts';
 import { type Api, checkedApi } from './model.ts';
 import { apply } from './output.ts';
 import { exec } from './process.ts';
+import { fresh, stamp } from './stamp.ts';
 import type { Context, Target } from './target.ts';
 import { react } from './targets/react.ts';
 import { reference } from './targets/reference.ts';
@@ -48,7 +49,7 @@ export const extract = async (config: Config, check: boolean): Promise<Api> => {
 
   if (ran.status !== 0) throw new Error(`wasm-facade: the extractor failed (${config.extractor.join(' ')})`);
 
-  return checkedApi(JSON.parse(readFileSync(join(config.root, config.api), 'utf8')));
+  return readApi(config);
 };
 
 export interface Report {
@@ -57,17 +58,38 @@ export interface Report {
   /** The commands that failed, and those skipped with why */
   failed: string[];
   skipped: string[];
+  /** With `generate`: its inputs and its files as the last time, nothing done */
+  fresh: boolean;
 }
 
-export const run = async (root: string, check: boolean): Promise<Report> => {
+export interface RunOptions {
+  /** `check`: compare, write nothing */
+  check?: boolean;
+  /** false: read the API at its path as it is, no extractor run (a repository committing `api.json`, its Rust not
+   * built: after an install) */
+  extract?: boolean;
+  /** true: every target run though nothing changed */
+  force?: boolean;
+}
+
+/** The API read at the configuration's path, as it is */
+export const readApi = (config: Config): Api =>
+  checkedApi(JSON.parse(readFileSync(join(config.root, config.api), 'utf8')));
+
+export const run = async (root: string, opts: RunOptions | boolean = {}): Promise<Report> => {
+  const {
+    check = false,
+    extract: extracting = true,
+    force = false,
+  } = typeof opts === 'boolean' ? { check: opts } : opts;
   const config = configOf(root);
-  const api = await extract(config, check);
+  const api = extracting ? await extract(config, check) : readApi(config);
+
+  if (!check && !force && fresh(config)) return { changed: [], failed: [], skipped: [], fresh: true };
+
   const targets = await targetsOf(config);
-  const changed = await apply(
-    config,
-    targets.flatMap(({ target, context }) => target.outputs({ ...context, api })),
-    check,
-  );
+  const outputs = targets.flatMap(({ target, context }) => target.outputs({ ...context, api }));
+  const changed = await apply(config, outputs, check);
   const failed: string[] = [];
   const skipped: string[] = [];
 
@@ -85,5 +107,7 @@ export const run = async (root: string, check: boolean): Promise<Report> => {
     if (result.status !== 0) failed.push(`${target.name}: ${result.stderr || result.stdout}`);
   }
 
-  return { changed, failed, skipped };
+  if (!check && failed.length === 0) stamp(config, [...new Set(outputs.map((o) => o.path))]);
+
+  return { changed, failed, skipped, fresh: false };
 };
