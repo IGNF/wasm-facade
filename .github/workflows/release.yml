@@ -2,10 +2,12 @@ name: Release
 
 # On a tag v<version>, once the crate of that version is on crates.io (`cargo publish`, PUBLISHING.md): the extractor
 # built for each platform, published as wasm-facade-<os>-<cpu>, then the wasm-facade package naming them as its
-# optional dependencies. Needs the NPM_TOKEN secret.
+# optional dependencies. Needs the NPM_TOKEN secret. Run by hand (Actions, "Run workflow"), it builds everything and
+# publishes nothing (npm publish --dry-run).
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -45,15 +47,17 @@ jobs:
         with:
           path: binaries
       - name: The tag is the package's version
+        if: github.ref_type == 'tag'
         run: test "v$(node -p 'require("./npm/package.json").version')" = "${GITHUB_REF_NAME}"
       - run: bun npm/scripts/platforms.ts binaries platforms
-      - name: The platform packages
-        run: for dir in platforms/*/; do npm publish --access public "$dir"; done
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - run: bun install
-      - name: The main package
-        run: npm publish --access public
-        working-directory: npm
+      - name: The platform packages, then the main package (a version already published is left as it is)
+        run: |
+          dry=$([ "$GITHUB_REF_TYPE" = tag ] || echo --dry-run)
+          for dir in platforms/*/ npm/; do
+            id="$(node -p "const p = require('./${dir}package.json'); p.name + '@' + p.version")"
+            if npm view "$id" version >/dev/null 2>&1; then echo "$id: already published"; continue; fi
+            (cd "$dir" && npm publish --access public $dry)
+          done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
