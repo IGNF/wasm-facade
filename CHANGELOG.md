@@ -7,6 +7,8 @@
 - The CLI runs on Node 20+ as on Bun (#4): `#!/usr/bin/env node`, TOML read by `smol-toml`, commands run by
   `node:child_process`. Plugins in TypeScript load on Bun and on Node 23.6+ as they are, on older Nodes with type
   stripping or a loader. A formatter that fails is now an error naming the file. The core's tests run on both (CI).
+- Whole files are the documented default (#1): the README shows how hand-written code extends what is generated (a
+  base class or a mixin, an extended interface, spread constants), regions kept for a file that cannot be split.
 - A whole file is written in a folder made for it if missing, and `check` no longer creates the files it compares.
 
 ## [0.1.0] - 2026-11-25
