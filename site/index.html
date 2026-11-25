@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wasm-facade</title>
+<meta name="description" content="A public API declared once in Rust, written as its TypeScript facade, React hooks, reference and any binding a plugin adds.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><nav>
+<a class="brand" href="./">wasm-facade</a>
+<a href="./" aria-current="page">Overview</a>
+<a href="demo/">Demo</a>
+<a href="reference/">Reference</a>
+<!--repository-->
+</nav></header>
+<main>
+<h1>Declare the API once, in Rust.<br>Generate the rest.</h1>
+<p class="lead">wasm-facade reads inert attributes on a Rust crate compiled with wasm-bindgen and writes what a JavaScript
+user calls: a TypeScript facade, React hooks, a reference, and any binding a plugin adds (Python, React Native, a web
+component). Change the Rust, run <code>wasm-facade generate</code>, and every binding follows.</p>
+<div class="cta"><a class="primary" href="demo/">Try the demo</a><a href="reference/">Read a generated reference</a></div>
+
+<figure class="flow" aria-label="The Rust declarations go through wasm-facade extract into api.json, from which wasm-facade generate writes the targets">
+<div><b>Rust</b><span>the crate, its attributes</span></div>
+<div class="hot"><b>wasm-facade extract</b><span>reads the declarations</span></div>
+<div><b>api.json</b><span>versioned, a JSON Schema</span></div>
+<div class="hot"><b>wasm-facade generate</b><span>runs the targets</span></div>
+<div><b>Generated</b><span>TypeScript · React · reference · plugins</span></div>
+</figure>
+
+<h2>orval, for Rust and wasm</h2>
+<p>orval reads an OpenAPI document and writes a typed client and TanStack Query hooks: the contract is written once
+and the client never drifts. wasm-facade does the same for a library compiled to WebAssembly.</p>
+<table>
+<tr><th></th><th>orval</th><th>wasm-facade</th></tr>
+<tr><td>Source of truth</td><td><code>openapi.json</code></td><td>the Rust crate, annotated</td></tr>
+<tr><td>Intermediate</td><td>the OpenAPI document</td><td><code>api.json</code>, with its schema</td></tr>
+<tr><td>Generated</td><td>typed client, React Query hooks, mocks</td><td>TypeScript facade, React hooks, reference, plugins</td></tr>
+<tr><td>Transport</td><td>HTTP</td><td>wasm-bindgen's exports, typed arrays passed as they are</td></tr>
+</table>
+<p>wasm-bindgen already writes declarations for what it exports. That surface is the engine's: numeric enums,
+positional arguments, <code>Function</code>, <code>free()</code> to remember. wasm-facade writes the layer a user
+calls on top of it: unions of strings, options objects with their defaults, <code>on(event, listener)</code>,
+promises, converters from the user's own types.</p>
+
+<h2>In a repository</h2>
+<h3>1. Declare the API in Rust</h3>
+<p>The attribute is behind a cfg that is never set: nothing is compiled, no proc-macro, no dependency, no build time.</p>
+<pre><code>/// A blur's options
+#[cfg_attr(wasm_facade, api(options))]
+pub struct BlurOptions {
+    /// Its radius, pixels
+    #[cfg_attr(wasm_facade, api(default = "2"))]
+    pub radius: f64,
+    /// How it reads past the edges
+    #[cfg_attr(wasm_facade, api(default = "'clamp'"))]
+    pub edge: Edge,
+}
+
+/// A box blur, applied to RGBA pixels in place
+#[cfg_attr(wasm_facade, api(class, options = "BlurOptions"))]
+#[wasm_bindgen]
+impl Blur { … }</code></pre>
+<h3>2. Configure the targets</h3>
+<pre><code># wasm-facade.toml, at the repository's root
+wasm = "../pkg/filters.js"         # the wasm-bindgen module, as the facade imports it
+converters = "src/converters.ts"   # the project's converters (ImageData → Uint8Array…)
+
+[targets.typescript]               # src/api.ts
+[targets.react]                    # src/hooks.ts
+[targets.reference]                # docs/api.md
+[targets.python]
+plugin = "scripts/api/python.ts"   # a target of the project's own</code></pre>
+<h3>3. Generate, and check in CI</h3>
+<pre><code>$ wasm-facade generate   # after changing the Rust
+$ wasm-facade check      # in the lint: fails on any drift</code></pre>
+<p>The result, for a small image-filters crate: <code>new Blur({ radius: 4, edge: 'wrap' })</code>,
+<code>blur.apply(imageData, w, h)</code>, <code>blur.on('progress', …)</code>, <code>useBlur(options)</code> in React.
+The <a href="demo/">demo</a> runs it and shows each generated file beside the Rust it comes from.</p>
+
+<h2>Why not an existing tool</h2>
+<table>
+<tr><th>Tool</th><th>What it writes</th><th>What a facade still needs</th></tr>
+<tr><td>wasm-bindgen</td><td>the low-level exports and their declarations</td><td>the facade, framework bindings</td></tr>
+<tr><td>ts-rs · tsify · schemars</td><td>the types of options</td><td>functions, classes, conversions</td></tr>
+<tr><td>specta</td><td>types and signatures</td><td>conversions, events</td></tr>
+<tr><td>UniFFI</td><td>native Swift, Kotlin, Python</td><td>the web; it copies data through serialization</td></tr>
+<tr><td>diplomat · interoptopus</td><td>C, C++, C#, Dart</td><td>callbacks, wasm</td></tr>
+</table>
+
+<h2>Plugins</h2>
+<p>A target is a module whose default export takes the API and returns files. The built-in ones are
+<code>typescript</code>, <code>react</code> and <code>reference</code>; a project adds its own, built from the same
+generic patterns (unions, options, classes, events, converters). isard, its first user, adds a Python widget, React
+Native and a web component this way.</p>
+
+<p class="note">MIT licence. Not published on crates.io or npm yet.</p>
+</main>
+</body>
+</html>

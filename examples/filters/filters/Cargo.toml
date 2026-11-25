@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 js-sys = "0.3"
 wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(wasm_facade)"] }

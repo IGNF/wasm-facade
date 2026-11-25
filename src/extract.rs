@@ -114,7 +114,11 @@ fn signature(config: &Config, sig: &Signature, attrs: &[Attribute]) -> Value {
         .iter()
         .filter_map(|input| match input {
             syn::FnArg::Typed(t) => Some(json!({
-                "name": t.pat.to_token_stream().to_string(),
+                // The binding's name alone: `mut image` and `ref image` are `image` to the caller
+                "name": match &*t.pat {
+                    syn::Pat::Ident(binding) => binding.ident.to_string(),
+                    pat => pat.to_token_stream().to_string(),
+                },
                 "type": type_text(&t.ty),
             })),
             syn::FnArg::Receiver(_) => None,
@@ -286,9 +290,13 @@ pub fn exported_calls(config: &Config, file: &syn::File) -> Vec<(String, Value)>
                 .iter()
                 .filter_map(|input| match input {
                     syn::FnArg::Typed(t) => Some(json!({
-                        "name": t.pat.to_token_stream().to_string(),
-                        "type": type_text(&t.ty),
-                    })),
+                            // The binding's name alone: `mut image` and `ref image` are `image` to the caller
+                    "name": match &*t.pat {
+                        syn::Pat::Ident(binding) => binding.ident.to_string(),
+                        pat => pat.to_token_stream().to_string(),
+                    },
+                            "type": type_text(&t.ty),
+                        })),
                     syn::FnArg::Receiver(_) => None,
                 })
                 .collect();
@@ -333,6 +341,21 @@ mod tests {
         assert_eq!(item["fields"][0]["api"]["slot"], 0);
         assert_eq!(item["fields"][0]["api"]["option"], true);
         assert_eq!(item["fields"][0]["api"]["ignored"], Value::Null);
+    }
+
+    #[test]
+    fn names_a_parameter_by_its_binding_alone() {
+        let file: syn::File = syn::parse_str(
+            r"
+            #[cfg_attr(my_api, api(function))]
+            pub fn blurred(mut image: Vec<u8>, ref width: u32) -> Vec<u8> { image }
+            ",
+        )
+        .unwrap();
+        let found = items(&config(), &file.items);
+
+        assert_eq!(found[0]["params"][0]["name"], "image");
+        assert_eq!(found[0]["params"][1]["name"], "width");
     }
 
     #[test]
