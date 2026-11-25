@@ -10,6 +10,10 @@
   plugin, `--force` runs every target. `inputs` in `wasm-facade.toml` names the files the plugins read. The README
   explains the setup: `api.json` committed, the outputs in `.gitignore`, `generate` in the build.
 
+- The npm package brings the extractor of its own version (#3): a prebuilt binary per platform as an optional
+  dependency (`wasm-facade-<os>-<cpu>`, published by the release workflow on a tag), else `cargo install` of the same
+  version once in `~/.cache/wasm-facade` (`WASM_FACADE_CACHE`). `extractor` in `wasm-facade.toml` only overrides it.
+
 ### Changed
 
 - The CLI runs on Node 20+ as on Bun (#4): `#!/usr/bin/env node`, TOML read by `smol-toml`, commands run by

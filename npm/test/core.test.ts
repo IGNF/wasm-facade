@@ -8,11 +8,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { configOf } from '../src/config.ts';
+import { cached, extractorOf, platformPackage } from '../src/extractor.ts';
 import { checkedApi, tsTypeOf } from '../src/model.ts';
 import { region } from '../src/output.ts';
 import { classes, converters, functions, options, unions } from '../src/patterns.ts';
 import { BUILT_IN, targetsOf } from '../src/run.ts';
 import { fresh, inputsOf, stamp } from '../src/stamp.ts';
+import { VERSION } from '../src/version.ts';
 import { relevant } from '../src/watch.ts';
 
 /** How this runtime runs a TypeScript file: Bun as it is, Node by stripping its types */
@@ -101,7 +103,7 @@ test("the configuration's defaults where its file says nothing", () => {
 
   const config = configOf(dir);
 
-  assert.deepEqual(config.extractor, ['wasm-facade']);
+  assert.equal(config.extractor, undefined);
   assert.equal(config.api, 'wasm-facade/api.json');
   assert.deepEqual(config.extract, { out: 'wasm-facade/api.json' });
   assert.deepEqual(Object.keys(config.targets), ['typescript']);
@@ -147,6 +149,14 @@ test('what the watch reacts to: Rust, the inputs; not the builds', () => {
   assert.equal(relevant('wasm-facade.toml', ['wasm-facade.toml']), true);
   assert.equal(relevant('target/debug/build/x.rs', []), false);
   assert.equal(relevant('src/api.ts', ['wasm-facade.toml']), false);
+});
+
+test("the extractor: the configuration's if given, the package's own of its version else", () => {
+  const config = configOf(repo);
+
+  assert.deepEqual(extractorOf(config), config.extractor);
+  assert.equal(platformPackage('linux', 'arm64'), 'wasm-facade-linux-arm64');
+  assert.ok(cached().endsWith(join('wasm-facade', VERSION)));
 });
 
 test('a region replaced between its markers, the rest kept', () => {

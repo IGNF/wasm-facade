@@ -6,19 +6,12 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Config } from './config.ts';
+import { VERSION } from './version.ts';
 
 const hash = (text: string): string => createHash('sha256').update(text).digest('hex');
 
 const read = (path: string): string => (existsSync(path) ? readFileSync(path, 'utf8') : '');
-
-/** wasm-facade's own version: a new version may write other files */
-const VERSION = (() => {
-  const here = dirname(fileURLToPath(import.meta.url));
-
-  return (JSON.parse(read(join(here, '../package.json')) || '{}') as { version?: string }).version ?? '';
-})();
 
 const EXTENSIONS = ['', '.ts', '.tsx', '.mts', '.js', '.mjs', '/index.ts', '/index.js'];
 

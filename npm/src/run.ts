@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { type Config, configOf } from './config.ts';
+import { extractorOf } from './extractor.ts';
 import { type Api, checkedApi } from './model.ts';
 import { apply } from './output.ts';
 import { exec } from './process.ts';
@@ -45,9 +46,10 @@ export const targetsOf = async (config: Config): Promise<{ target: Target; conte
 /** The API the extractor makes, written (or with `check` compared) at the configuration's path */
 export const extract = async (config: Config, check: boolean): Promise<Api> => {
   const args = ['extract', ...(check ? ['--check'] : []), '--config', JSON.stringify(config.extract)];
-  const ran = exec([...config.extractor, ...args], config.root, { inherit: true });
+  const extractor = extractorOf(config);
+  const ran = exec([...extractor, ...args], config.root, { inherit: true });
 
-  if (ran.status !== 0) throw new Error(`wasm-facade: the extractor failed (${config.extractor.join(' ')})`);
+  if (ran.status !== 0) throw new Error(`wasm-facade: the extractor failed (${extractor.join(' ')})`);
 
   return readApi(config);
 };
