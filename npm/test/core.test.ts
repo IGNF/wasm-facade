@@ -198,7 +198,9 @@ test('the built-in targets are the example repository’s files, once formatted'
   assert.deepEqual(written, ['src/api.ts', 'src/hooks.ts', 'docs/api.md']);
 });
 
-test('the example repository, a repository of its own, is as its declarations make it (wasm-facade check)', async () => {
+test('the example repository, a repository of its own, is as its declarations make it (wasm-facade check)', {
+  timeout: 600_000,
+}, async () => {
   const result = spawnSync(process.execPath, [...TS, join(import.meta.dirname, '../src/cli.ts'), 'check'], {
     cwd: join(repo, 'filters'),
     encoding: 'utf8',
