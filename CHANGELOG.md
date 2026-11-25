@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The CLI runs on Node 20+ as on Bun (#4): `#!/usr/bin/env node`, TOML read by `smol-toml`, commands run by
+  `node:child_process`. Plugins in TypeScript load on Bun and on Node 23.6+ as they are, on older Nodes with type
+  stripping or a loader. A formatter that fails is now an error naming the file. The core's tests run on both (CI).
+- A whole file is written in a folder made for it if missing, and `check` no longer creates the files it compares.
+
 ## [0.1.0] - 2026-11-25
 
 First version, taken out of isard (its `crates/apigen` and `packages/apigen`, branch `api-gen-proto`, 2026-11-24).

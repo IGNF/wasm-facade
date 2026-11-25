@@ -8,6 +8,7 @@
     "lint": "biome check .",
     "typecheck": "tsc -p npm/tsconfig.json",
     "test": "bun test npm",
+    "test:node": "cd npm && node --experimental-strip-types --no-warnings --test test/*.test.ts",
     "example:check": "cd examples/filters && bun ../../npm/src/cli.ts check",
     "site": "bun site/build.ts"
   },

@@ -5,10 +5,11 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { $ } from 'bun';
+import { pathToFileURL } from 'node:url';
 import { type Config, configOf } from './config.ts';
 import { type Api, checkedApi } from './model.ts';
 import { apply } from './output.ts';
+import { exec } from './process.ts';
 import type { Context, Target } from './target.ts';
 import { react } from './targets/react.ts';
 import { reference } from './targets/reference.ts';
@@ -27,7 +28,7 @@ export const targetsOf = async (config: Config): Promise<{ target: Target; conte
   for (const [name, options] of enabled) {
     const plugin = options.plugin;
     const target = plugin
-      ? ((await import(join(config.root, plugin))) as { default?: unknown }).default
+      ? ((await import(pathToFileURL(join(config.root, plugin)).href)) as { default?: unknown }).default
       : BUILT_IN[name];
 
     if (!isTarget(target))
@@ -42,9 +43,10 @@ export const targetsOf = async (config: Config): Promise<{ target: Target; conte
 
 /** The API the extractor makes, written (or with `check` compared) at the configuration's path */
 export const extract = async (config: Config, check: boolean): Promise<Api> => {
-  await $`${config.extractor} extract ${check ? ['--check'] : []} --config ${JSON.stringify(config.extract)}`.cwd(
-    config.root,
-  );
+  const args = ['extract', ...(check ? ['--check'] : []), '--config', JSON.stringify(config.extract)];
+  const ran = exec([...config.extractor, ...args], config.root, { inherit: true });
+
+  if (ran.status !== 0) throw new Error(`wasm-facade: the extractor failed (${config.extractor.join(' ')})`);
 
   return checkedApi(JSON.parse(readFileSync(join(config.root, config.api), 'utf8')));
 };
@@ -78,9 +80,9 @@ export const run = async (root: string, check: boolean): Promise<Report> => {
       continue;
     }
 
-    const result = await $`${command.run}`.cwd(root).nothrow().quiet();
+    const result = exec(command.run, root);
 
-    if (result.exitCode !== 0) failed.push(`${target.name}: ${result.stderr.toString() || result.stdout.toString()}`);
+    if (result.status !== 0) failed.push(`${target.name}: ${result.stderr || result.stdout}`);
   }
 
   return { changed, failed, skipped };
