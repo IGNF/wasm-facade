@@ -2,6 +2,7 @@
 
 import init from '../../examples/filters/pkg/filters.js';
 import { Blur, type Edge, histogram } from '../../examples/filters/src/api.ts';
+import { copyImage, drawTestImage } from '../image.ts';
 
 const element = <T extends HTMLElement>(id: string): T => {
   const found = document.getElementById(id);
@@ -15,47 +16,18 @@ const canvas = element<HTMLCanvasElement>('image');
 const context = canvas.getContext('2d', { willReadFrequently: true });
 const bars = element<HTMLCanvasElement>('histogram').getContext('2d');
 const radius = element<HTMLInputElement>('radius');
-const edge = element<HTMLSelectElement>('edge');
+const edges = element('edge');
+let edge: Edge = 'clamp';
 const progress = element<HTMLProgressElement>('progress');
 
 if (!context || !bars) throw new Error('demo: no 2D canvas');
-
-/** The test image: stripes and discs near the edges, where clamp and wrap differ */
-const source = (): ImageData => {
-  const { width, height } = canvas;
-  const gradient = context.createLinearGradient(0, 0, width, height);
-
-  gradient.addColorStop(0, '#1d3557');
-  gradient.addColorStop(1, '#e76f51');
-  context.fillStyle = gradient;
-  context.fillRect(0, 0, width, height);
-  Array.from({ length: 14 }, (_, i) => i).forEach((i) => {
-    context.fillStyle = i % 2 ? '#f1faee' : '#264653';
-    context.fillRect(i * 40, 0, 20, 60);
-  });
-  [
-    [40, 300, '#ffb703'],
-    [520, 300, '#8ecae6'],
-    [280, 190, '#f1faee'],
-  ].forEach(([x, y, color]) => {
-    context.fillStyle = color as string;
-    context.beginPath();
-    context.arc(x as number, y as number, 56, 0, Math.PI * 2);
-    context.fill();
-  });
-  context.fillStyle = '#111';
-  context.font = '600 44px ui-monospace, Menlo, monospace';
-  context.fillText('wasm-facade', 140, 205);
-
-  return context.getImageData(0, 0, width, height);
-};
 
 const drawHistogram = (counts: Uint32Array) => {
   const { width, height } = bars.canvas;
   const top = Math.max(...counts);
 
   bars.clearRect(0, 0, width, height);
-  bars.fillStyle = getComputedStyle(document.body).getPropertyValue('--accent');
+  bars.fillStyle = getComputedStyle(document.body).getPropertyValue('--gen');
   counts.forEach((count, i) => {
     const h = (count / top) * height;
     bars.fillRect(i, height - h, 1, h);
@@ -77,12 +49,12 @@ show('rust');
 
 await init({ module_or_path: new URL('filters_bg.wasm', import.meta.url) });
 
-const original = source();
+const original = drawTestImage(context);
 
 const run = () => {
-  const options = { radius: Number(radius.value), edge: edge.value as Edge };
+  const options = { radius: Number(radius.value), edge };
   const blur = new Blur(options);
-  const image = new ImageData(new Uint8ClampedArray(original.data), original.width, original.height);
+  const image = copyImage(original);
   const stop = blur.on('progress', (share) => {
     progress.value = share;
   });
@@ -96,7 +68,7 @@ const run = () => {
   blur.free();
   context.putImageData(image, 0, 0);
   drawHistogram(histogram(image));
-  element('radius-value').textContent = radius.value;
+  element('radius-value').textContent = `${radius.value} px`;
   element('timing').textContent = `${image.width} × ${image.height} px blurred in ${ms.toFixed(1)} ms`;
   element('call').textContent = [
     `const blur = new Blur({ radius: ${options.radius}, edge: '${options.edge}' });`,
@@ -108,5 +80,13 @@ const run = () => {
 };
 
 radius.addEventListener('input', run);
-edge.addEventListener('change', run);
+edges.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
+  button.addEventListener('click', () => {
+    edge = button.dataset.edge as Edge;
+    edges.querySelectorAll('button').forEach((other) => {
+      other.setAttribute('aria-pressed', String(other === button));
+    });
+    run();
+  });
+});
 run();

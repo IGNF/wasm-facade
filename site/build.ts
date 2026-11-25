@@ -28,6 +28,11 @@ const read = (path: string) => readFileSync(join(root, path), 'utf8');
 
 const repository = process.argv.find((arg) => arg.startsWith('--repository='))?.slice('--repository='.length);
 const menu = repository ? `<a href="${repository}">Repository</a>` : '';
+const fonts = [
+  '<link rel="preconnect" href="https://fonts.googleapis.com">',
+  '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+  '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..700&family=JetBrains+Mono:wght@400;600;700&display=swap">',
+].join('\n');
 
 // The wasm-bindgen CLI must be the version of the crate the example locks, or the module does not load
 const locked = /name = "wasm-bindgen"\nversion = "([^"]+)"/.exec(read('examples/filters/Cargo.lock'))?.[1];
@@ -54,8 +59,78 @@ run('wasm-bindgen', [
 
 rmSync(out, { recursive: true, force: true });
 
+/** The reference target's Markdown as cards: one per declaration, its kind's badge, a table of contents and counts */
+const kinds: Record<string, { kind: string; letter: string; one: string; many: string }> = {
+  Functions: { kind: 'function', letter: 'f', one: 'function', many: 'functions' },
+  Classes: { kind: 'class', letter: 'C', one: 'class', many: 'classes' },
+  Options: { kind: 'options', letter: 'O', one: 'options', many: 'options' },
+  Unions: { kind: 'union', letter: 'U', one: 'union', many: 'unions' },
+};
+
+const reference = (html: string) => {
+  const title = /<h1>(.*?)<\/h1>/.exec(html)?.[1] ?? 'API';
+  const badge = (kind: string) =>
+    `<span class="badge ${kind}" aria-hidden="true">${Object.values(kinds).find((k) => k.kind === kind)?.letter}</span>`;
+  // A list item `<code>signature</code> → <code>type</code>: what it does` as its signature beside its description
+  const rows = (list: string) =>
+    list.replace(
+      /<li>(.*?<\/code>\)?): (.*?)<\/li>/g,
+      '<li><span class="sig">$1</span><span class="desc">$2</span></li>',
+    );
+  const toc: string[] = [];
+  const counts: string[] = [];
+  const sections = html
+    .split(/(?=<h2>)/)
+    .filter((part) => part.startsWith('<h2>'))
+    .map((part) => {
+      const heading = /<h2>(.*?)<\/h2>/.exec(part)?.[1] ?? '';
+      const known = kinds[heading];
+
+      if (!known) return rows(part);
+
+      const body = part.slice(part.indexOf('</h2>') + 5);
+      // Classes and options: one card per `###`; functions and unions: one card per list item
+      const entries = body.includes('<h3>')
+        ? body
+            .split(/(?=<h3>)/)
+            .filter((entry) => entry.startsWith('<h3>'))
+            .map((entry) => {
+              const name = /<h3><code>(.*?)<\/code><\/h3>/.exec(entry)?.[1] ?? '';
+
+              return {
+                name,
+                html: rows(entry.replace(/<h3>(.*?)<\/h3>/, `<h3>${badge(known.kind)}$1</h3>`)),
+              };
+            })
+        : [...body.matchAll(/<li>(.*?)<\/li>/g)].map(([, item = '']) => {
+            const [, signature = '', rest = ''] = /^(.*?<\/code>(?: → <code>.*?<\/code>)?): (.*)$/.exec(item) ?? [];
+            const name = /<code>([\w$]+)/.exec(signature)?.[1] ?? '';
+            const values = [...rest.matchAll(/<code>(.*?)<\/code> \((.*?)\)/g)];
+            const described = values.length
+              ? `<ul>${values.map(([, value, what]) => `<li><span class="sig"><code>${value}</code></span><span class="desc">${what}</span></li>`).join('')}</ul>`
+              : `<p>${rest}</p>`;
+
+            return { name, html: `<h3>${badge(known.kind)}${signature}</h3>${described}` };
+          });
+
+      toc.push(
+        `<p>${heading}</p><ul>${entries.map((e) => `<li><a href="#${e.name}">${badge(known.kind)}${e.name}</a></li>`).join('')}</ul>`,
+      );
+      counts.push(`<li>${badge(known.kind)}${entries.length} ${entries.length === 1 ? known.one : known.many}</li>`);
+
+      return `<h2>${heading}</h2>${entries.map((e) => `<article class="entry" id="${e.name}">${e.html}</article>`).join('')}`;
+    });
+
+  return {
+    title: `<h1>${title}</h1>`,
+    counts: `<ul class="counts">${counts.join('')}</ul>`,
+    toc: `<nav class="toc" aria-label="Declarations">${toc.join('')}</nav>`,
+    reference: `<div class="doc-body">${sections.join('')}</div>`,
+  };
+};
+
 const page = (from: string, to: string, fill: Record<string, string> = {}) => {
-  const filled = Object.entries({ repository: menu, ...fill }).reduce(
+  const filled = Object.entries({ repository: menu, fonts, ...fill }).reduce(
     (html, [key, value]) => html.replace(`<!--${key}-->`, () => value),
     read(from),
   );
@@ -84,21 +159,28 @@ writeFileSync(
   ),
 );
 
-const built = await Bun.build({
-  entrypoints: [join(root, 'site/demo/main.ts')],
-  outdir: join(out, 'demo'),
-  naming: 'main.js',
-  target: 'browser',
-  format: 'esm',
-  minify: true,
-});
+const bundle = async (entry: string, to: string) => {
+  const built = await Bun.build({
+    entrypoints: [join(root, entry)],
+    outdir: dirname(join(out, to)),
+    naming: to.split('/').at(-1),
+    target: 'browser',
+    format: 'esm',
+    minify: true,
+  });
 
-if (!built.success) throw new Error(`site: the demo's bundle: ${built.logs.join('\n')}`);
+  if (!built.success) throw new Error(`site: the bundle of ${entry}: ${built.logs.join('\n')}`);
+};
+
+await bundle('site/demo/main.ts', 'demo/main.js');
+await bundle('site/home.ts', 'home.js');
 copyFileSync(join(pkg, 'filters_bg.wasm'), join(out, 'demo/filters_bg.wasm'));
 
-page('site/reference/index.html', 'reference/index.html', {
-  reference: await marked.parse(read('examples/filters/docs/api.md')),
-});
+page(
+  'site/reference/index.html',
+  'reference/index.html',
+  reference(await marked.parse(read('examples/filters/docs/api.md'))),
+);
 
 // GitHub Pages serves the folders as they are (no Jekyll)
 writeFileSync(join(out, '.nojekyll'), '');

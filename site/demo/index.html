@@ -5,45 +5,57 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>wasm-facade demo</title>
 <meta name="description" content="An image-filters crate in Rust, called through the facade wasm-facade generated from its declarations.">
+<!--fonts-->
 <link rel="stylesheet" href="../style.css">
 </head>
 <body>
 <header class="top"><nav>
-<a class="brand" href="../">wasm-facade</a>
+<a class="brand" href="../"><span class="mark" aria-hidden="true"></span>wasm-facade</a>
 <a href="../">Overview</a>
 <a href="./" aria-current="page">Demo</a>
 <a href="../reference/">Reference</a>
 <!--repository-->
 </nav></header>
 <main>
-<h1>An image filter, called through its generated facade</h1>
-<p class="lead">A small Rust crate (a box blur and a histogram) compiled to wasm. This page imports only
-<code>src/api.ts</code>, the facade wasm-facade wrote from the crate's declarations: no hand-written binding.</p>
+<section class="hero">
+<h1>A blur in Rust, called from this page</h1>
+<p class="lead">A small crate, a box blur and a histogram, compiled to wasm. The page imports only
+<code>src/api.ts</code>, the facade wasm-facade wrote from the crate's declarations.</p>
+</section>
 
 <div class="playground">
-<canvas id="image" width="560" height="360" aria-label="The test image, blurred"></canvas>
+<canvas id="image" width="640" height="400" aria-label="The test image, blurred"></canvas>
 <div class="controls">
-<label><span>Radius <span id="radius-value" class="stat"></span></span>
-<input id="radius" type="range" min="0" max="24" step="1" value="2"></label>
-<label><span>Edge</span>
-<select id="edge"><option value="clamp">clamp</option><option value="wrap">wrap</option></select></label>
-<label><span>Progress (the <code>progress</code> event)</span>
+<label><span>Radius <b class="stat" id="radius-value"></b></span>
+<input id="radius" type="range" min="0" max="24" step="1" value="6"></label>
+<fieldset class="field"><legend class="stat">Edge</legend>
+<div class="segmented" id="edge">
+<button type="button" data-edge="clamp" aria-pressed="true">clamp</button>
+<button type="button" data-edge="wrap" aria-pressed="false">wrap</button>
+</div></fieldset>
+<label><span>The <code>progress</code> event</span>
 <progress id="progress" max="1" value="0"></progress></label>
-<p id="timing" class="stat" aria-live="polite"></p>
-<div><p class="stat">Luminance histogram (<code>histogram(image)</code>)</p>
+<div><span class="stat"><code>histogram(image)</code>, luminance</span>
 <canvas id="histogram" width="256" height="90" aria-label="The luminance histogram of the blurred image"></canvas></div>
+<p id="timing" class="stat" aria-live="polite"></p>
 </div>
 </div>
 
 <pre><code id="call"></code></pre>
 
-<h2>The code</h2>
-<p>The Rust is written by hand; everything else on this list is generated, and <code>wasm-facade check</code> fails
-in CI if any of it drifts from the Rust.</p>
+<div class="chain">
+<div class="step src"><b>filters/src/lib.rs</b><span>the Rust, written by hand</span></div>
+<span class="arrow" aria-hidden="true"></span>
+<div class="step"><b>wasm-facade generate</b><span>reads its declarations</span></div>
+<span class="arrow" aria-hidden="true"></span>
+<div class="step out"><b>src/api.ts, src/hooks.ts</b><span>what this page imports</span></div>
+</div>
+<p class="note">Only the Rust is written by hand. <code>wasm-facade check</code> fails in CI if a generated file drifts
+from it.</p>
 <div class="tabs" role="tablist">
-<button type="button" role="tab" aria-selected="true" data-file="rust">filters/src/lib.rs · by hand</button>
-<button type="button" role="tab" aria-selected="false" data-file="ts">src/api.ts · generated</button>
-<button type="button" role="tab" aria-selected="false" data-file="hooks">src/hooks.ts · generated</button>
+<button type="button" role="tab" aria-selected="true" data-file="rust"><span class="dot rust-dot"></span>filters/src/lib.rs</button>
+<button type="button" role="tab" aria-selected="false" data-file="ts"><span class="dot gen-dot"></span>src/api.ts</button>
+<button type="button" role="tab" aria-selected="false" data-file="hooks"><span class="dot gen-dot"></span>src/hooks.ts</button>
 <button type="button" role="tab" aria-selected="false" data-file="config">wasm-facade.toml</button>
 </div>
 <pre><code id="source"></code></pre>
