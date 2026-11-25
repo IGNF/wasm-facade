@@ -6,6 +6,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Config } from './config.ts';
 import { pluginPath } from './plugin.ts';
 import { VERSION } from './version.ts';
@@ -64,8 +65,22 @@ interface Stamp {
 
 const stampPath = (config: Config): string => join(config.root, config.cache, 'stamp.json');
 
+/** wasm-facade's own modules (its built-in targets among them): a change of them, not only of its version, counts */
+const OWN = (() => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const entry = ['run.ts', 'run.js'].map((f) => join(here, f)).find((f) => existsSync(f));
+
+  return entry
+    ? hash(
+        modulesOf(entry)
+          .map((p) => hash(read(p)))
+          .join(),
+      )
+    : '';
+})();
+
 const inputsHash = (config: Config): string =>
-  hash(JSON.stringify([VERSION, ...inputsOf(config).map((p) => [p, hash(read(join(config.root, p)))])]));
+  hash(JSON.stringify([VERSION, OWN, ...inputsOf(config).map((p) => [p, hash(read(join(config.root, p)))])]));
 
 /** Whether the inputs are those of the last `generate` and every file it wrote is still as written */
 export const fresh = (config: Config): boolean => {

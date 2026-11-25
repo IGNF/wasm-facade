@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { configOf } from '../src/config.ts';
 import { cached, extractorOf, platformPackage } from '../src/extractor.ts';
-import { checkedApi, tsTypeOf } from '../src/model.ts';
+import { checkedApi, pyDoc, pyLiteral, pyTypeOf, tsTypeOf } from '../src/model.ts';
 import { region } from '../src/output.ts';
 import { classes, converters, functions, options, settingCalls, settings, unions } from '../src/patterns.ts';
 import { BUILT_IN, targetsOf } from '../src/run.ts';
@@ -138,6 +138,17 @@ test('settings: a setter, a getter where kept, the call applying it, the setting
   );
 });
 
+test('Rust in Python: hints, literals, documentation in snake_case', () => {
+  assert.equal(pyTypeOf(api, 'Option<f64>'), 'float | None');
+  assert.equal(pyTypeOf(api, '&mut [u8]'), 'bytes | Sequence[int]');
+  assert.equal(pyTypeOf(api, 'Vec<u32>'), 'Sequence[int]');
+  assert.equal(pyTypeOf(api, 'Edge'), 'Edge');
+  assert.equal(pyLiteral("'clamp'"), '"clamp"');
+  assert.equal(pyLiteral('true'), 'True');
+  assert.equal(pyLiteral('[1, 2]'), undefined);
+  assert.equal(pyDoc('Sets `minZoom`'), 'Sets `min_zoom`');
+});
+
 test("the configuration's defaults where its file says nothing", () => {
   const dir = mkdtempSync(join(tmpdir(), 'wasm-facade-'));
 
@@ -233,11 +244,20 @@ test('a region replaced between its markers, the rest kept', () => {
 
 test('the built-in targets are the example repository’s files, once formatted', () => {
   const config = configOf(repo);
-  const written = ['typescript', 'react', 'reference'].flatMap((name) =>
+  const names = ['typescript', 'react', 'reference', 'python', 'python-reference', 'react-native', 'web-component'];
+  const written = names.flatMap((name) =>
     (BUILT_IN[name]?.outputs({ api, config, options: config.targets[name] ?? {} }) ?? []).map((o) => o.path),
   );
 
-  assert.deepEqual(written, ['src/api.ts', 'src/hooks.ts', 'docs/api.md']);
+  assert.deepEqual(written, [
+    'src/api.ts',
+    'src/hooks.ts',
+    'docs/api.md',
+    'python/filters/_api.py',
+    'docs/python.md',
+    'src/native.api.ts',
+    'src/element.api.ts',
+  ]);
 });
 
 test('the example repository, a repository of its own, is as its declarations make it (wasm-facade check)', {

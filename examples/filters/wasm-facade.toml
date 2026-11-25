@@ -12,3 +12,17 @@ wasm = "../pkg/filters.js"
 [targets.react]
 [targets.reference]
 title = "filters"
+
+[targets.python]
+out = "python/filters/_api.py"
+title = "filters"
+
+[targets.python-reference]
+out = "docs/python.md"
+title = "filters"
+
+[targets.react-native]
+
+# <filters-blur>'s attributes: the blur's options
+[targets.web-component]
+from = ["BlurOptions"]

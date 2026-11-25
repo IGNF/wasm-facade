@@ -14,11 +14,23 @@ import { pluginPath } from './plugin.ts';
 import { exec } from './process.ts';
 import { fresh, stamp } from './stamp.ts';
 import type { Context, Target } from './target.ts';
+import { python } from './targets/python.ts';
+import { pythonReference } from './targets/python-reference.ts';
 import { react } from './targets/react.ts';
+import { reactNative } from './targets/react-native.ts';
 import { reference } from './targets/reference.ts';
 import { typescript } from './targets/typescript.ts';
+import { webComponent } from './targets/web-component.ts';
 
-export const BUILT_IN: Record<string, Target> = { typescript, react, reference };
+export const BUILT_IN: Record<string, Target> = {
+  typescript,
+  react,
+  reference,
+  python,
+  'python-reference': pythonReference,
+  'react-native': reactNative,
+  'web-component': webComponent,
+};
 
 const isTarget = (value: unknown): value is Target =>
   typeof value === 'object' && value !== null && 'name' in value && 'outputs' in value;

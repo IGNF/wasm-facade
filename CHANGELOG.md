@@ -23,6 +23,12 @@
   the target's own (`settings(api, { callKey: 'engine' })`). Domain patterns (isard's feature layers) stay in their
   project's plugins.
 
+- Four built-in targets (#5): `python` (the Python API: `Literal` unions, `TypedDict` options with their defaults and
+  keyword functions, a mixin per class, settings struct and the functions, handing each call by the facade's name to
+  the transport of the class inheriting it), `python-reference`, `react-native` (the names a bridge exposes) and
+  `web-component` (a custom element's attributes, read as numbers, flags or text). The example writes all of them.
+- `generate`'s stamp counts wasm-facade's own modules, not only its version.
+
 ### Changed
 
 - The CLI runs on Node 20+ as on Bun (#4): `#!/usr/bin/env node`, TOML read by `smol-toml`, commands run by
