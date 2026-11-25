@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * wasm-facade's command line, from any folder of a repository with an `wasm-facade.toml` (found from the current folder up):
  *

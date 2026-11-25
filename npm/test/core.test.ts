@@ -1,62 +1,94 @@
 /** wasm-facade's core: Rust's types in TypeScript, the generic patterns, the configuration's defaults, the regions, the
  * built-in targets on the example repository's API; and the example repository checked end to end (extractor
  * included) from its own folder */
-import { describe, expect, test } from 'bun:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { $ } from 'bun';
+import { describe, test } from 'node:test';
 import { configOf } from '../src/config.ts';
 import { checkedApi, tsTypeOf } from '../src/model.ts';
 import { region } from '../src/output.ts';
 import { classes, converters, functions, options, unions } from '../src/patterns.ts';
-import { BUILT_IN } from '../src/run.ts';
+import { BUILT_IN, targetsOf } from '../src/run.ts';
 
-const repo = join(import.meta.dir, '../../examples/filters');
+/** How this runtime runs a TypeScript file: Bun as it is, Node by stripping its types */
+const TS = process.versions.bun ? [] : ['--experimental-strip-types', '--no-warnings'];
+
+const repo = join(import.meta.dirname, '../../examples/filters');
 const api = checkedApi(JSON.parse(readFileSync(join(repo, 'wasm-facade/api.json'), 'utf8')));
 
 describe("Rust's types in TypeScript", () => {
   test('numbers, strings, slices as typed arrays, Option, Result, the enums declared, the project’s own', () => {
-    expect(tsTypeOf(api, 'f64')).toBe('number');
-    expect(tsTypeOf(api, '&mut[u8]')).toBe('Uint8Array');
-    expect(tsTypeOf(api, 'Vec<f32>')).toBe('Float32Array');
-    expect(tsTypeOf(api, 'Option<String>')).toBe('string | undefined');
-    expect(tsTypeOf(api, 'Result<u64, JsValue>')).toBe('bigint');
-    expect(tsTypeOf(api, 'Edge')).toBe('Edge');
-    expect(tsTypeOf(api, 'Rgba', { Rgba: '[number, number, number, number]' })).toBe(
+    assert.equal(tsTypeOf(api, 'f64'), 'number');
+    assert.equal(tsTypeOf(api, '&mut[u8]'), 'Uint8Array');
+    assert.equal(tsTypeOf(api, 'Vec<f32>'), 'Float32Array');
+    assert.equal(tsTypeOf(api, 'Option<String>'), 'string | undefined');
+    assert.equal(tsTypeOf(api, 'Result<u64, JsValue>'), 'bigint');
+    assert.equal(tsTypeOf(api, 'Edge'), 'Edge');
+    assert.equal(
+      tsTypeOf(api, 'Rgba', { Rgba: '[number, number, number, number]' }),
       '[number, number, number, number]',
     );
-    expect(() => tsTypeOf(api, 'HashMap<u8, u8>')).toThrow("wasm-facade.toml's [types]");
+    assert.throws(
+      () => tsTypeOf(api, 'HashMap<u8, u8>'),
+      (e: Error) => e.message.includes("wasm-facade.toml's [types]"),
+    );
   });
 
   test('an api.json of another schema is refused', () => {
-    expect(() => checkedApi({ schema: 2, items: [], calls: {} })).toThrow('schema 2');
+    assert.throws(
+      () => checkedApi({ schema: 2, items: [], calls: {} }),
+      (e: Error) => e.message.includes('schema 2'),
+    );
   });
 });
 
 describe('the generic patterns', () => {
   test('a union, options with their defaults, a function and its converter', () => {
-    expect(unions(api).map((u) => u.values.map((v) => v.value))).toEqual([['clamp', 'wrap']]);
-    expect(options(api)[0]?.fields.map((f) => [f.name, f.default])).toEqual([
-      ['radius', '2'],
-      ['edge', "'clamp'"],
-    ]);
-    expect(functions(api).map((f) => f.name)).toEqual(['histogram']);
-    expect(converters(functions(api)[0] ?? { api: {} })).toEqual({ image: 'pixels' });
+    assert.deepEqual(
+      unions(api).map((u) => u.values.map((v) => v.value)),
+      [['clamp', 'wrap']],
+    );
+    assert.deepEqual(
+      options(api)[0]?.fields.map((f) => [f.name, f.default]),
+      [
+        ['radius', '2'],
+        ['edge', "'clamp'"],
+      ],
+    );
+    assert.deepEqual(
+      functions(api).map((f) => f.name),
+      ['histogram'],
+    );
+    assert.deepEqual(converters(functions(api)[0] ?? { api: {} }), { image: 'pixels' });
   });
 
   test('a class: its constructor, property, methods, event', () => {
     const [blur] = classes(api);
 
-    expect(blur?.options?.name).toBe('BlurOptions');
-    expect(blur?.ctor?.params.map((p) => p.name)).toEqual(['radius', 'edge']);
-    expect(blur?.properties.map((p) => [p.name, p.setter !== undefined])).toEqual([['radius', true]]);
-    expect(blur?.methods.map((m) => [m.export, m.async])).toEqual([
-      ['apply', false],
-      ['applyLater', true],
-      ['applyWhere', false],
-    ]);
-    expect(blur?.events.map((e) => [e.name, e.payload])).toEqual([['progress', 'number']]);
+    assert.equal(blur?.options?.name, 'BlurOptions');
+    assert.deepEqual(
+      blur?.ctor?.params.map((p) => p.name),
+      ['radius', 'edge'],
+    );
+    assert.deepEqual(
+      blur?.properties.map((p) => [p.name, p.setter !== undefined]),
+      [['radius', true]],
+    );
+    assert.deepEqual(
+      blur?.methods.map((m) => [m.export, m.async]),
+      [
+        ['apply', false],
+        ['applyLater', true],
+        ['applyWhere', false],
+      ],
+    );
+    assert.deepEqual(
+      blur?.events.map((e) => [e.name, e.payload]),
+      [['progress', 'number']],
+    );
   });
 });
 
@@ -67,17 +99,33 @@ test("the configuration's defaults where its file says nothing", () => {
 
   const config = configOf(dir);
 
-  expect(config.extractor).toEqual(['wasm-facade']);
-  expect(config.api).toBe('wasm-facade/api.json');
-  expect(config.extract).toEqual({ out: 'wasm-facade/api.json' });
-  expect(Object.keys(config.targets)).toEqual(['typescript']);
+  assert.deepEqual(config.extractor, ['wasm-facade']);
+  assert.equal(config.api, 'wasm-facade/api.json');
+  assert.deepEqual(config.extract, { out: 'wasm-facade/api.json' });
+  assert.deepEqual(Object.keys(config.targets), ['typescript']);
+});
+
+test("a plugin in TypeScript, loaded from the repository's root", async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'wasm-facade-'));
+  const plugin = "const target: { name: string; outputs: () => [] } = { name: 'mine', outputs: () => [] };\n";
+
+  writeFileSync(join(dir, 'wasm-facade.toml'), '[targets.mine]\nplugin = "mine.ts"\n');
+  writeFileSync(join(dir, 'mine.ts'), `${plugin}export default target;\n`);
+
+  const [loaded] = await targetsOf(configOf(dir));
+
+  assert.equal(loaded?.target.name, 'mine');
 });
 
 test('a region replaced between its markers, the rest kept', () => {
-  expect(region('a\n# <api:x> made\nold\n# </api:x>\nb\n', 'x', 'new', '#')).toBe(
+  assert.equal(
+    region('a\n# <api:x> made\nold\n# </api:x>\nb\n', 'x', 'new', '#'),
     'a\n# <api:x> made\nnew\n# </api:x>\nb\n',
   );
-  expect(() => region('a\n', 'x', '', '//')).toThrow('no region');
+  assert.throws(
+    () => region('a\n', 'x', '', '//'),
+    (e: Error) => e.message.includes('no region'),
+  );
 });
 
 test('the built-in targets are the example repository’s files, once formatted', () => {
@@ -86,15 +134,15 @@ test('the built-in targets are the example repository’s files, once formatted'
     (BUILT_IN[name]?.outputs({ api, config, options: config.targets[name] ?? {} }) ?? []).map((o) => o.path),
   );
 
-  expect(written).toEqual(['src/api.ts', 'src/hooks.ts', 'docs/api.md']);
+  assert.deepEqual(written, ['src/api.ts', 'src/hooks.ts', 'docs/api.md']);
 });
 
 test('the example repository, a repository of its own, is as its declarations make it (wasm-facade check)', async () => {
-  const result = await $`bun ${join(import.meta.dir, '../src/cli.ts')} check`
-    .cwd(join(repo, 'filters'))
-    .nothrow()
-    .quiet();
+  const result = spawnSync(process.execPath, [...TS, join(import.meta.dirname, '../src/cli.ts'), 'check'], {
+    cwd: join(repo, 'filters'),
+    encoding: 'utf8',
+  });
 
-  expect(result.stderr.toString()).toBe('');
-  expect(result.stdout.toString()).toContain('every target as declared');
-}, 600_000);
+  assert.equal(result.stderr, '');
+  assert.ok(result.stdout.includes('every target as declared'));
+});

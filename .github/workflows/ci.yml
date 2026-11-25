@@ -43,18 +43,21 @@ jobs:
       - run: bun run example:check
 
   node:
-    # The published package on Node, once it runs without Bun (PUBLISHING.md, "Bun-only APIs"): build, then the
-    # example checked with the built CLI
+    # The published package on Node, without Bun: the core's tests on a Node that strips types, then the built CLI
+    # checking the example on the oldest Node supported
     runs-on: ubuntu-latest
-    if: false # TODO: enable once npm/src runs on Node
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - run: npm install
+      - run: npm run test:node
       - run: npm run build --workspace npm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - run: node ../../npm/dist/cli.js check
         working-directory: examples/filters
