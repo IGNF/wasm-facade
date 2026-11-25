@@ -12,3 +12,6 @@ Cargo.lock.bak
 # Local secrets (the crates.io token)
 .env
 __pycache__/
+
+# Claude Code settings, per machine
+.claude/
