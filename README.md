@@ -5,7 +5,6 @@ the crate's wasm-bindgen exports, React hooks, a web component's attributes and 
 API, their references in Markdown, and any other binding a plugin adds. Change the Rust, run `wasm-facade generate`, and
 every binding follows; `wasm-facade check` in CI fails on any drift.
 
-
 Site, with a live demo: <https://ignf.github.io/wasm-facade/>
 
 ## Why: orval, for Rust and wasm
@@ -17,7 +16,7 @@ contract is written once and the client never drifts. wasm-facade does the same 
 | --- | --- | --- |
 | Source of truth | `openapi.json` | the Rust crate, annotated |
 | Intermediate | the OpenAPI document | `api.json` (`data/api.schema.json`, versioned) |
-| Generated | typed client, React Query hooks, mocks | TypeScript facade over wasm-bindgen, React hooks, reference, plugins |
+| Generated | typed client, React Query hooks, mocks | TypeScript facade over wasm-bindgen, React hooks, web component, React Native, Python, references, plugins |
 | Transport | HTTP | wasm-bindgen's exports, typed arrays passed as they are |
 
 wasm-bindgen already writes `.d.ts` for what it exports. That surface is the engine's, not the user's: numeric enums,
@@ -34,12 +33,12 @@ npm install -D wasm-facade@0.2.1   # `npx wasm-facade generate` (or bun, pnpm, y
 The generator runs on Node 20+ and on Bun. The package brings the extractor of its own version: prebuilt for macOS,
 Linux (x64, arm64) and Windows (x64) in the package itself (`bin/<os>-<cpu>`), else installed once by
 `cargo install wasm-facade --version <its version>` in `~/.cache/wasm-facade` (`WASM_FACADE_CACHE`) and reused. Nothing
-else to install, here or in CI.
+else to install, here or in CI: extracting reads the workspace with `cargo metadata`, `--no-extract` needs no Rust.
 
 ## What a repository does
 
-1. **Declare** the public API in Rust with an inert attribute, `#[cfg_attr(wasm_facade, api(…))]`. `wasm_facade` is a cfg
-   never set: nothing is compiled, no proc-macro, no dependency, no build time. Tell rustc the cfg is known:
+1. **Declare** the public API in Rust with an inert attribute, `#[cfg_attr(wasm_facade, api(…))]`. `wasm_facade` is a
+   cfg never set: nothing is compiled, no proc-macro, no dependency, no build time. Tell rustc the cfg is known:
 
    ```toml
    [lints.rust]
@@ -55,7 +54,11 @@ else to install, here or in CI.
    [targets.typescript]              # out = "src/api.ts"
    [targets.react]                   # out = "src/hooks.ts", facade = "src/api.ts"
    [targets.reference]               # out = "docs/api.md", title = "API"
+   [targets.python]                  # out = "python/_api.py"
    ```
+
+   The declarations may live in any member of the Cargo workspace: every member is read (or `[extract] members`), so
+   moving code between crates or folders changes nothing generated.
 
 3. **Register converters** (optional): a module whose named exports take what the facade's user gives and return
    what the wasm module takes (`pixels(image: ImageData): Uint8Array`). A declaration names one by its name.
@@ -68,7 +71,10 @@ else to install, here or in CI.
 `api.json` is the contract: committed, its diff shows an API change in review. What is generated from it need not be:
 
 ```gitignore
-src/*.api.ts
+# What wasm-facade.toml's targets write (here the defaults)
+src/api.ts
+src/hooks.ts
+docs/api.md
 ```
 
 ```json
@@ -92,9 +98,6 @@ src/*.api.ts
 `check` is then needed only by a repository that commits its outputs, and in CI after the build, where it fails if
 the committed `api.json` is not what the Rust declares.
 
-The declarations may live in any member of the Cargo workspace: every member is read (or `[extract] members`), so
-moving code between crates or folders changes nothing generated.
-
 ## The attribute
 
 `#[cfg_attr(wasm_facade, api(key = "text", key = 3, flag))]` on a struct, an enum, an exported `pub fn` or an exported
@@ -113,7 +116,7 @@ own patterns read theirs.
 | a method taking a listener | `event = "progress"`, `payload = "number"` | `on('progress', listener)`, returning what stops it |
 | a parameter given through a converter | `convert = "image=pixels, …"` | the parameter typed as the converter's parameter |
 | a result through a converter | `result = "toImage"` | typed as the converter's result |
-| `struct ViewSettings { min_zoom: f64 }` | `settings`; on a field `call = "setZoomRange"`, `getter`, `store`, `spread`, `convert`, `default` | the pattern `settings`: each field a setting of a host class (`setMinZoom`, `getMinZoom`), for a target to write |
+| `struct ViewSettings { min_zoom: f64 }` | `settings`; on a field `call = "setZoomRange"`, `getter`, `store`, `spread`, `convert`, `default` | each field a setting of a host class (`setMinZoom`, `getMinZoom`): read by the `web-component`, `react-native` and `python` targets and by plugins |
 
 Names: `snake_case` becomes `camelCase`; exported names are wasm-bindgen's `js_name`. A class's documentation is its
 `impl` block's doc comment; every doc comment becomes TSDoc and reference text. Types: numbers, `bool`, `String`,
@@ -136,12 +139,13 @@ own types in `[types]`.
 | `inputs` | none | files the plugins read besides their modules, in `generate`'s stamp |
 | `cache` | `node_modules/.cache/wasm-facade` | where `generate` keeps its stamp |
 | `[format]` | none | a formatter per extension, the text on its stdin (`".ts" = ["biome", "format", "--stdin-file-path={name}"]`) |
-| `[targets.<name>]` | | a target to run: built in (above) or `plugin = "path.ts"` (or a package); `enabled = false` turns one off; the other keys are its options |
+| `[targets.<name>]` | | a target to run: built in (below) or `plugin = "path.ts"` (or a package); `enabled = false` turns one off; the other keys are its options |
 
 ## Built-in targets
 
-The TypeScript facade is the one binding that calls the wasm module; the web's bindings are written over it. Python
-is a sibling, read from the same `api.json`:
+The TypeScript facade is the one binding that calls the wasm module: React's hooks import it, and the web component's
+attributes and React Native's names are for the hand-written element and bridge over it. Python is a sibling, read
+from the same `api.json`:
 
 | Target | Writes (default `out`) | |
 | --- | --- | --- |
@@ -149,7 +153,7 @@ is a sibling, read from the same `api.json`:
 | `react` | hooks over the facade (`src/hooks.ts`; `facade`) | `useBlur(options)`, `useBlurEvent(blur, type, listener)` |
 | `web-component` | a custom element's attributes (`src/element.api.ts`; `from`, the structs, default the settings) | `ATTRIBUTES` (`'max-pitch'` → `maxPitch`, a number, a flag or text), `attributeValue(name, text)` |
 | `react-native` | the names a bridge exposes (`src/native.api.ts`) | each class's methods, properties and events, the functions, the settings' setters and getters |
-| `python` | the Python API (`python/_api.py`; `types`, `functions`) | `Literal` unions, `TypedDict` options with their defaults and keyword functions, a mixin per class, settings struct and the functions |
+| `python` | the Python API (`python/_api.py`; `title`, `types`, `functions`) | `Literal` unions, `TypedDict` options with their defaults and keyword functions, a mixin per class, settings struct and the functions |
 | `reference` | the reference (`docs/api.md`; `title`) | |
 | `python-reference` | the Python reference (`docs/python.md`; `title`, `types`) | |
 
@@ -196,8 +200,8 @@ A plugin may be written in TypeScript: Bun and Node 23.6+ load it as it is; on N
 or write the plugin in JavaScript.
 
 `outputs` returns whole files. A target reads the API through the patterns (`classes`, `functions`, `options`,
-`unions`, `converters`, `settings` from `wasm-facade`) or its own; no target imports another. The file it reads, `api.json`, is
-described by `data/api.schema.json`.
+`unions`, `converters`, `settings` from `wasm-facade`) or its own; no target imports another. The file it reads,
+`api.json`, is described by `data/api.schema.json`.
 
 ### Generated beside hand-written code: whole files
 
@@ -232,16 +236,21 @@ git.
 ## The example
 
 `examples/filters` is a repository of its own using wasm-facade: an image-filters crate (`filters/src/lib.rs`, every
-pattern above), its `wasm-facade.toml`, its converters, and what wasm-facade writes from them: `src/api.ts` (the facade),
-`src/hooks.ts` (`useBlur`, `useBlurEvent`), `src/element.api.ts`, `src/native.api.ts`, `python/filters/_api.py` (its
-Python, over a recording transport in `python/filters/__init__.py`, tested and typed strictly in CI), `docs/api.md`,
-`docs/python.md`. `pkg/filters.d.ts` stands in for wasm-bindgen's output
-so that the facade is type-checked without building the wasm module.
+pattern above but the settings), its `wasm-facade.toml` (every built-in target), its converters, and what wasm-facade
+writes from them, committed so that `check` shows any drift:
+
+- `src/api.ts` (the facade), `src/hooks.ts` (`useBlur`, `useBlurEvent`), `src/element.api.ts`, `src/native.api.ts`;
+- `python/filters/_api.py`, over a recording transport in `python/filters/__init__.py`, run and typed strictly
+  (pyright) in CI;
+- `docs/api.md`, `docs/python.md`.
+
+`pkg/filters.d.ts` stands in for wasm-bindgen's output, so that the facade is type-checked without building the wasm
+module.
 
 ## Name
 
-`wasm-facade`: what it writes is the facade over a wasm-bindgen module. Free on crates.io and npm on 2026-11-25
-(`apigen`, the working name, is taken on both).
+`wasm-facade`: what it writes is the facade over a wasm-bindgen module. The crate (the extractor) and the npm package
+(the generator, the extractor's binaries in it) share their version.
 
 ## Licence
 
