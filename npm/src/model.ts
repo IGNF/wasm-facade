@@ -68,7 +68,8 @@ export const SCHEMA = 1;
 export const checkedApi = (json: unknown): Api => {
   const api = json as Api;
 
-  if (api?.schema !== SCHEMA) throw new Error(`wasm-facade: api.json's schema ${String(api?.schema)}, ${SCHEMA} expected`);
+  if (api?.schema !== SCHEMA)
+    throw new Error(`wasm-facade: api.json's schema ${String(api?.schema)}, ${SCHEMA} expected`);
 
   return api;
 };

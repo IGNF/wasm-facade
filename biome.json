@@ -2,7 +2,7 @@
   "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/dist", "!target", "!examples/*/wasm-facade/api.json"]
+    "includes": ["**", "!**/dist", "!target", "!examples/*/wasm-facade/api.json", "!**/*.md", "!.idea"]
   },
   "formatter": {
     "enabled": true,

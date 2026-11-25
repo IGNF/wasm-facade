@@ -9,7 +9,15 @@
     "url": "https://example.invalid/wasm-facade.git",
     "directory": "npm"
   },
-  "keywords": ["wasm", "wasm-bindgen", "rust", "typescript", "codegen", "bindings", "react"],
+  "keywords": [
+    "wasm",
+    "wasm-bindgen",
+    "rust",
+    "typescript",
+    "codegen",
+    "bindings",
+    "react"
+  ],
   "engines": {
     "node": ">=20",
     "bun": ">=1.2"
@@ -24,7 +32,11 @@
     }
   },
   "types": "./dist/index.d.ts",
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",

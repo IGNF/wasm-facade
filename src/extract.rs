@@ -18,7 +18,11 @@ pub fn items(config: &Config, items: &[Item]) -> Vec<Value> {
                 .map(|(_, inner)| self::items(config, inner))
                 .unwrap_or_default(),
             _ => declared(config, item)
-                .filter(|value| value["api"].as_object().is_some_and(|keys| !keys.is_empty()))
+                .filter(|value| {
+                    value["api"]
+                        .as_object()
+                        .is_some_and(|keys| !keys.is_empty())
+                })
                 .into_iter()
                 .collect(),
         })
@@ -142,7 +146,10 @@ fn signature(config: &Config, sig: &Signature, attrs: &[Attribute]) -> Value {
 
 /// A type as written, its tokens' spaces left out but after commas
 fn type_text(ty: &syn::Type) -> String {
-    ty.to_token_stream().to_string().replace(' ', "").replace(',', ", ")
+    ty.to_token_stream()
+        .to_string()
+        .replace(' ', "")
+        .replace(',', ", ")
 }
 
 /// The documentation's lines, joined
@@ -153,7 +160,9 @@ fn doc(attrs: &[Attribute]) -> String {
         .filter_map(|a| match &a.meta {
             Meta::NameValue(nv) => match &nv.value {
                 Expr::Lit(lit) => match &lit.lit {
-                    Lit::Str(s) => Some(s.value().strip_prefix(' ').unwrap_or(&s.value()).to_owned()),
+                    Lit::Str(s) => {
+                        Some(s.value().strip_prefix(' ').unwrap_or(&s.value()).to_owned())
+                    }
                     _ => None,
                 },
                 _ => None,
@@ -170,12 +179,16 @@ fn keys(config: &Config, attrs: &[Attribute]) -> Value {
     let mut keys = Map::new();
 
     for attr in attrs.iter().filter(|a| a.path().is_ident("cfg_attr")) {
-        let Ok(parts) = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated) else {
+        let Ok(parts) = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+        else {
             continue;
         };
         let mut parts = parts.into_iter();
 
-        if !parts.next().is_some_and(|cfg| cfg.path().is_ident(&config.cfg)) {
+        if !parts
+            .next()
+            .is_some_and(|cfg| cfg.path().is_ident(&config.cfg))
+        {
             continue;
         }
         for part in parts {
@@ -185,7 +198,9 @@ fn keys(config: &Config, attrs: &[Attribute]) -> Value {
                 continue;
             }
 
-            let Ok(entries) = inner.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated) else {
+            let Ok(entries) =
+                inner.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+            else {
                 continue;
             };
 
@@ -195,7 +210,9 @@ fn keys(config: &Config, attrs: &[Attribute]) -> Value {
                     Meta::NameValue(nv) => match &nv.value {
                         Expr::Lit(lit) => match &lit.lit {
                             Lit::Str(s) => json!(s.value()),
-                            Lit::Int(i) => i.base10_parse::<i64>().map_or(Value::Null, |n| json!(n)),
+                            Lit::Int(i) => {
+                                i.base10_parse::<i64>().map_or(Value::Null, |n| json!(n))
+                            }
                             Lit::Bool(b) => json!(b.value),
                             _ => Value::Null,
                         },
@@ -227,10 +244,14 @@ fn export_entries(config: &Config, attrs: &[Attribute]) -> Vec<Meta> {
 
 /// An item's `#[<export_attribute>(<export_name> = …)]`
 fn exported_name(config: &Config, attrs: &[Attribute]) -> Option<String> {
-    export_entries(config, attrs).into_iter().find_map(|entry| match entry {
-        Meta::NameValue(nv) if nv.path.is_ident(&config.export_name) => Some(nv.value.to_token_stream().to_string()),
-        _ => None,
-    })
+    export_entries(config, attrs)
+        .into_iter()
+        .find_map(|entry| match entry {
+            Meta::NameValue(nv) if nv.path.is_ident(&config.export_name) => {
+                Some(nv.value.to_token_stream().to_string())
+            }
+            _ => None,
+        })
 }
 
 /// The methods of the exported classes' exported `impl` blocks, by their exported name: their parameters (name,
@@ -239,8 +260,13 @@ fn exported_name(config: &Config, attrs: &[Attribute]) -> Option<String> {
 pub fn exported_calls(config: &Config, file: &syn::File) -> Vec<(String, Value)> {
     let blocks = file.items.iter().filter_map(|item| match item {
         Item::Impl(block)
-            if config.exported.contains(&block.self_ty.to_token_stream().to_string())
-                && block.attrs.iter().any(|a| a.path().is_ident(&config.export_attribute)) =>
+            if config
+                .exported
+                .contains(&block.self_ty.to_token_stream().to_string())
+                && block
+                    .attrs
+                    .iter()
+                    .any(|a| a.path().is_ident(&config.export_attribute)) =>
         {
             Some(block)
         }
@@ -250,7 +276,9 @@ pub fn exported_calls(config: &Config, file: &syn::File) -> Vec<(String, Value)>
     blocks
         .flat_map(|block| &block.items)
         .filter_map(|item| {
-            let ImplItem::Fn(method) = item else { return None };
+            let ImplItem::Fn(method) = item else {
+                return None;
+            };
             let name = exported_name(config, &method.attrs)?;
             let params: Vec<Value> = method
                 .sig

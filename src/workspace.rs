@@ -29,10 +29,14 @@ pub fn workspace(config: &Config) -> Result<Workspace, String> {
         .map_err(|e| format!("cargo metadata: {e}"))?;
 
     if !output.status.success() {
-        return Err(format!("cargo metadata: {}", String::from_utf8_lossy(&output.stderr)));
+        return Err(format!(
+            "cargo metadata: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
 
-    let metadata: Value = serde_json::from_slice(&output.stdout).map_err(|e| format!("cargo metadata: {e}"))?;
+    let metadata: Value =
+        serde_json::from_slice(&output.stdout).map_err(|e| format!("cargo metadata: {e}"))?;
     let root = PathBuf::from(
         metadata["workspace_root"]
             .as_str()
@@ -49,7 +53,13 @@ pub fn workspace(config: &Config) -> Result<Workspace, String> {
         .into_iter()
         .flatten()
         .filter(|package| package["id"].as_str().is_some_and(|id| ids.contains(id)))
-        .filter_map(|package| Some(Path::new(package["manifest_path"].as_str()?).parent()?.to_path_buf()))
+        .filter_map(|package| {
+            Some(
+                Path::new(package["manifest_path"].as_str()?)
+                    .parent()?
+                    .to_path_buf(),
+            )
+        })
         .collect();
 
     all.sort();
@@ -64,7 +74,9 @@ pub fn workspace(config: &Config) -> Result<Workspace, String> {
                 if all.contains(&path) {
                     Ok(path)
                 } else {
-                    Err(format!("[extract] members: {dir} is not a member of the workspace"))
+                    Err(format!(
+                        "[extract] members: {dir} is not a member of the workspace"
+                    ))
                 }
             })
             .collect::<Result<Vec<_>, _>>()?,

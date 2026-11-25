@@ -92,7 +92,11 @@ impl Config {
                 Value::Null => Ok(None),
                 Value::Array(values) => values
                     .iter()
-                    .map(|v| v.as_str().map(str::to_owned).ok_or(format!("[extract] {key}: strings")))
+                    .map(|v| {
+                        v.as_str()
+                            .map(str::to_owned)
+                            .ok_or(format!("[extract] {key}: strings"))
+                    })
                     .collect::<Result<Vec<_>, _>>()
                     .map(Some),
                 _ => Err(format!("[extract] {key}: a list of strings")),
@@ -126,7 +130,12 @@ impl Config {
 ///
 /// An item declared twice, a call named and not exported or exported twice
 pub fn api(config: &Config, root: &Path, files: &[(PathBuf, syn::File)]) -> Result<Value, String> {
-    let shown = |path: &Path| path.strip_prefix(root).unwrap_or(path).display().to_string();
+    let shown = |path: &Path| {
+        path.strip_prefix(root)
+            .unwrap_or(path)
+            .display()
+            .to_string()
+    };
     let mut declared: BTreeMap<String, (Value, PathBuf)> = BTreeMap::new();
     let mut exported: BTreeMap<String, Vec<(Value, PathBuf)>> = BTreeMap::new();
 
@@ -144,7 +153,10 @@ pub fn api(config: &Config, root: &Path, files: &[(PathBuf, syn::File)]) -> Resu
             declared.insert(name, (item, path.clone()));
         }
         for (name, method) in exported_calls(config, file) {
-            exported.entry(name).or_default().push((method, path.clone()));
+            exported
+                .entry(name)
+                .or_default()
+                .push((method, path.clone()));
         }
     }
 
@@ -190,12 +202,18 @@ fn call_names(config: &Config, items: &[Value]) -> BTreeMap<String, String> {
 
     for item in items {
         let owner = item["name"].as_str().unwrap_or_default();
-        let fields = item["fields"].as_array().into_iter().flatten().map(|f| &f["api"]);
+        let fields = item["fields"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|f| &f["api"]);
 
         for keys in std::iter::once(&item["api"]).chain(fields) {
             for key in &config.call_keys {
                 if let Some(call) = keys[key.as_str()].as_str() {
-                    names.entry(call.to_owned()).or_insert_with(|| owner.to_owned());
+                    names
+                        .entry(call.to_owned())
+                        .or_insert_with(|| owner.to_owned());
                 }
             }
         }
@@ -224,7 +242,10 @@ pub fn run(config: &Config, check: bool) -> Result<String, String> {
     }
 
     let api = api(config, &root, &files)?;
-    let text = format!("{}\n", serde_json::to_string_pretty(&api).map_err(|e| e.to_string())?);
+    let text = format!(
+        "{}\n",
+        serde_json::to_string_pretty(&api).map_err(|e| e.to_string())?
+    );
     let out = root.join(&config.out);
     let name = &config.out;
     let count = |key: &str| {
@@ -262,7 +283,10 @@ mod tests {
 
     #[test]
     fn the_defaults_then_the_keys_given() {
-        let config = Config::from_json(&json!({ "cfg": "my_api", "exported": ["Engine"], "members": "all" })).unwrap();
+        let config = Config::from_json(
+            &json!({ "cfg": "my_api", "exported": ["Engine"], "members": "all" }),
+        )
+        .unwrap();
 
         assert_eq!(config.cfg, "my_api");
         assert_eq!(config.attribute, "api");
@@ -274,8 +298,10 @@ mod tests {
 
     #[test]
     fn a_call_named_and_not_exported_is_an_error() {
-        let config = Config::from_json(&json!({ "cfg": "my_api", "exported": ["Engine"] })).unwrap();
-        let file = syn::parse_str("#[cfg_attr(my_api, api(call = \"addDots\"))] pub struct Dots;").unwrap();
+        let config =
+            Config::from_json(&json!({ "cfg": "my_api", "exported": ["Engine"] })).unwrap();
+        let file = syn::parse_str("#[cfg_attr(my_api, api(call = \"addDots\"))] pub struct Dots;")
+            .unwrap();
         let error = api(&config, Path::new("/"), &[(PathBuf::from("/a.rs"), file)]).unwrap_err();
 
         assert!(error.contains("names the call `addDots`"), "{error}");
@@ -288,7 +314,10 @@ mod tests {
         let error = api(
             &config,
             Path::new("/"),
-            &[(PathBuf::from("/a.rs"), file()), (PathBuf::from("/b.rs"), file())],
+            &[
+                (PathBuf::from("/a.rs"), file()),
+                (PathBuf::from("/b.rs"), file()),
+            ],
         )
         .unwrap_err();
 
