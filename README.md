@@ -113,6 +113,7 @@ own patterns read theirs.
 | a method taking a listener | `event = "progress"`, `payload = "number"` | `on('progress', listener)`, returning what stops it |
 | a parameter given through a converter | `convert = "image=pixels, …"` | the parameter typed as the converter's parameter |
 | a result through a converter | `result = "toImage"` | typed as the converter's result |
+| `struct ViewSettings { min_zoom: f64 }` | `settings`; on a field `call = "setZoomRange"`, `getter`, `store`, `spread`, `convert`, `default` | the pattern `settings`: each field a setting of a host class (`setMinZoom`, `getMinZoom`), for a target to write |
 
 Names: `snake_case` becomes `camelCase`; exported names are wasm-bindgen's `js_name`. A class's documentation is its
 `impl` block's doc comment; every doc comment becomes TSDoc and reference text. Types: numbers, `bool`, `String`,
@@ -164,7 +165,7 @@ A plugin may be written in TypeScript: Bun and Node 23.6+ load it as it is; on N
 or write the plugin in JavaScript.
 
 `outputs` returns whole files. A target reads the API through the patterns (`classes`, `functions`, `options`,
-`unions`, `converters` from `wasm-facade`) or its own; no target imports another. The file it reads, `api.json`, is
+`unions`, `converters`, `settings` from `wasm-facade`) or its own; no target imports another. The file it reads, `api.json`, is
 described by `data/api.schema.json`.
 
 ### Generated beside hand-written code: whole files

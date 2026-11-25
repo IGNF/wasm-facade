@@ -17,6 +17,12 @@
 - A plugin may be a package the repository depends on (`plugin = "wasm-facade-plugin-foo"`), resolved from its root,
   as well as a module of the repository.
 
+- The `settings` pattern (#6): a struct with `api(settings)`, each field a setting of a host class (its setter,
+  its getter where kept, where the host keeps it, the exported call applying it, the settings that call takes
+  together, its converter and default); `settingCalls` groups them by call. The key naming the call is `call`, or
+  the target's own (`settings(api, { callKey: 'engine' })`). Domain patterns (isard's feature layers) stay in their
+  project's plugins.
+
 ### Changed
 
 - The CLI runs on Node 20+ as on Bun (#4): `#!/usr/bin/env node`, TOML read by `smol-toml`, commands run by

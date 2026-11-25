@@ -38,6 +38,9 @@ export {
   type OptionField,
   type Options,
   options,
+  type Setting,
+  settingCalls,
+  settings,
   type Union,
   unions,
 } from './patterns.ts';
