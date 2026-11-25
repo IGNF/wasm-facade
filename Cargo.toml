@@ -11,7 +11,7 @@ description = "A public API declared once in Rust with inert attributes, read in
 keywords = ["wasm-bindgen", "typescript", "codegen", "bindings", "api"]
 categories = ["development-tools::ffi", "wasm", "web-programming"]
 # What crates.io gets: the extractor, its schema, its tests (the npm package and the example are not the crate's)
-include = ["src/**", "data/**", "tests/**", "README.md", "LICENSE", "CHANGELOG.md"]
+include = ["/src/**", "/data/**", "/tests/**", "/README.md", "/LICENSE", "/CHANGELOG.md"]
 
 [lib]
 path = "src/lib.rs"
