@@ -42,8 +42,10 @@ The core's own imports end in `.ts`: the build (`tsconfig.build.json`) rewrites 
 - [ ] `LICENSE` copied into `npm/` at build (npm's `files` lists it)
 - [x] the extractor's binary for users without Rust (#3): prebuilt per platform by `.github/workflows/release.yml`
       on a tag (npm packages `wasm-facade-<os>-<cpu>`, the main package's optional dependencies, written by
-      `npm/scripts/platforms.ts`), `cargo install` into a cache otherwise. From 0.2: `cargo publish` first, then push
-      the tag `v<version>`; the workflow publishes the npm packages (secret `NPM_TOKEN`)
+      `npm/scripts/platforms.ts`), `cargo install` into a cache otherwise. A release: `cargo publish` first, then push
+      the tag `v<version>`; the workflow publishes the npm packages through npm's trusted publishing (no token).
+      A new package's first version is published by hand (`npm login`, `npm publish --access public`), then this
+      workflow added as its trusted publisher on npmjs.com (GitHub Actions, IGNF/wasm-facade, `release.yml`)
 - [ ] a version policy: the npm package and the crate share their version; `schema` moves only on a breaking change
       of `api.json`
 - [ ] docs: the README is the documentation for 0.1; a site later
