@@ -7,6 +7,8 @@
  * api = "wasm-facade/api.json"            # where the extractor writes the API (the `[extract]` table's `out`)
  * converters = "src/converters.ts"   # the project's converters, imported by the facade (none by default)
  * wasm = "./pkg/my_crate.js"         # the wasm-bindgen module the facade imports
+ * inputs = ["scripts/names.json"]    # files the plugins read, besides their modules (for `generate`'s stamp)
+ * cache = "node_modules/.cache/wasm-facade" # where `generate` keeps its stamp
  *
  * [extract]                          # the extractor's: cfg, attribute, exported, call_keys, members ("all"), out
  * cfg = "wasm_facade"
@@ -46,6 +48,10 @@ export interface Config {
   types: Record<string, string>;
   format: Record<string, string[]>;
   targets: Record<string, TargetConfig>;
+  /** Files besides the API, the configuration and the plugins (and their local imports) that what is generated reads */
+  inputs: string[];
+  /** Where `generate` keeps the stamp making it incremental, from the root */
+  cache: string;
 }
 
 export const FILE = 'wasm-facade.toml';
@@ -83,5 +89,7 @@ export const configOf = (root: string): Config => {
       Object.entries(record<unknown>(file.format)).map(([ext, command]) => [ext, strings(command, [])]),
     ),
     targets: record<TargetConfig>(file.targets),
+    inputs: strings(file.inputs, []),
+    cache: typeof file.cache === 'string' ? file.cache : 'node_modules/.cache/wasm-facade',
   };
 };
