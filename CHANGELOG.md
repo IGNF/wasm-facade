@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-25
+
 ### Added
 
 - Generated on build (#2): `generate` is incremental (a stamp of its inputs and of the files it wrote, in `cache`:
