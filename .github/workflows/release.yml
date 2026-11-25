@@ -1,9 +1,8 @@
 name: Release
 
 # On a tag v<version>, once the crate of that version is on crates.io (`cargo publish`, PUBLISHING.md): the extractor
-# built for each platform, published as wasm-facade-<os>-<cpu>, then the wasm-facade package naming them as its
-# optional dependencies. npm's trusted publishing authenticates this workflow, with provenance: configured once on
-# npmjs.com in each package's settings (publisher GitHub Actions, IGNF/wasm-facade, workflow release.yml); no token
+# built for each platform and put in the wasm-facade package (npm/bin/<os>-<cpu>), then the package published. npm's
+# trusted publishing authenticates this workflow, with provenance: configured once on npmjs.com in the package's settings (publisher GitHub Actions, IGNF/wasm-facade, workflow release.yml); no token
 # is stored. A package's first version is published by hand, npm having no settings for it before (PUBLISHING.md). Run by hand (Actions, "Run workflow"), it builds everything and
 # publishes nothing (npm publish --dry-run).
 on:
@@ -55,13 +54,12 @@ jobs:
       - name: The tag is the package's version
         if: github.ref_type == 'tag'
         run: test "v$(node -p 'require("./npm/package.json").version')" = "${GITHUB_REF_NAME}"
-      - run: bun npm/scripts/platforms.ts binaries platforms
-      - run: bun install
-      - name: The platform packages, then the main package (a version already published is left as it is)
+      - run: bun install --frozen-lockfile
+      - run: bun npm/scripts/bundle.ts binaries
+      - name: The package (a version already published is left as it is)
+        working-directory: npm
         run: |
           dry=$([ "$GITHUB_REF_TYPE" = tag ] || echo --dry-run)
-          for dir in platforms/*/ npm/; do
-            id="$(node -p "const p = require('./${dir}package.json'); p.name + '@' + p.version")"
-            if npm view "$id" version >/dev/null 2>&1; then echo "$id: already published"; continue; fi
-            (cd "$dir" && npm publish --access public --provenance $dry)
-          done
+          id="$(node -p "const p = require('./package.json'); p.name + '@' + p.version")"
+          if npm view "$id" version >/dev/null 2>&1; then echo "$id: already published"; exit 0; fi
+          npm publish --access public --provenance $dry

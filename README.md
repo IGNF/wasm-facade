@@ -28,11 +28,11 @@ anyone maintaining it by hand.
 ## Install
 
 ```sh
-npm install -D wasm-facade@0.2.0   # `npx wasm-facade generate` (or bun, pnpm, yarn)
+npm install -D wasm-facade@0.2.1   # `npx wasm-facade generate` (or bun, pnpm, yarn)
 ```
 
 The generator runs on Node 20+ and on Bun. The package brings the extractor of its own version: prebuilt for macOS,
-Linux (x64, arm64) and Windows (x64) as an optional dependency (`wasm-facade-<os>-<cpu>`), else installed once by
+Linux (x64, arm64) and Windows (x64) in the package itself (`bin/<os>-<cpu>`), else installed once by
 `cargo install wasm-facade --version <its version>` in `~/.cache/wasm-facade` (`WASM_FACADE_CACHE`) and reused. Nothing
 else to install, here or in CI.
 

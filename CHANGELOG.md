@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-26
+
+### Changed
+
+- The prebuilt extractors are in the `wasm-facade` package itself (`bin/<os>-<cpu>`), no longer one package per
+  platform: npm's spam detection refused those names, and 0.2.0 was never published on npm. The release publishes
+  through npm's trusted publishing, with provenance.
+
 ## [0.2.0] - 2026-11-25
 
 ### Added
