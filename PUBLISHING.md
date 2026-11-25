@@ -40,8 +40,10 @@ The core's own imports end in `.ts`: the build (`tsconfig.build.json`) rewrites 
 
 - [x] `repository` and `homepage` in `Cargo.toml` and `npm/package.json` (github.com/IGNF/wasm-facade)
 - [ ] `LICENSE` copied into `npm/` at build (npm's `files` lists it)
-- [ ] the extractor's binary for users without Rust: `cargo install`, or prebuilt binaries (cargo-dist) the npm
-      package downloads; until then the README says to install it with Cargo
+- [x] the extractor's binary for users without Rust (#3): prebuilt per platform by `.github/workflows/release.yml`
+      on a tag (npm packages `wasm-facade-<os>-<cpu>`, the main package's optional dependencies, written by
+      `npm/scripts/platforms.ts`), `cargo install` into a cache otherwise. From 0.2: `cargo publish` first, then push
+      the tag `v<version>`; the workflow publishes the npm packages (secret `NPM_TOKEN`)
 - [ ] a version policy: the npm package and the crate share their version; `schema` moves only on a breaking change
       of `api.json`
 - [ ] docs: the README is the documentation for 0.1; a site later

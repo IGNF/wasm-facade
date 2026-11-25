@@ -17,5 +17,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "test", "../examples/filters/src"]
+  "include": ["src", "test", "scripts", "../examples/filters/src"]
 }

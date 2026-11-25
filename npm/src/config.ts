@@ -3,7 +3,7 @@
  * key has a default, a conventional repository gives almost nothing.
  *
  * ```toml
- * extractor = ["wasm-facade"]             # the command running the crate's extractor (default: `wasm-facade` on the PATH)
+ * extractor = ["cargo", "run", "--"]    # the command running the extractor (default: the package's own, extractor.ts)
  * api = "wasm-facade/api.json"            # where the extractor writes the API (the `[extract]` table's `out`)
  * converters = "src/converters.ts"   # the project's converters, imported by the facade (none by default)
  * wasm = "./pkg/my_crate.js"         # the wasm-bindgen module the facade imports
@@ -40,7 +40,8 @@ export interface TargetConfig {
 
 export interface Config {
   root: string;
-  extractor: string[];
+  /** The command running the extractor, if given: the package's own else (`extractor.ts`) */
+  extractor: string[] | undefined;
   api: string;
   converters: string | undefined;
   wasm: string | undefined;
@@ -79,7 +80,7 @@ export const configOf = (root: string): Config => {
 
   return {
     root,
-    extractor: strings(file.extractor, ['wasm-facade']),
+    extractor: Array.isArray(file.extractor) ? strings(file.extractor, []) : undefined,
     api,
     converters: typeof file.converters === 'string' ? file.converters : undefined,
     wasm: typeof file.wasm === 'string' ? file.wasm : undefined,
