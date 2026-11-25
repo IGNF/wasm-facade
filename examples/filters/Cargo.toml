@@ -1,0 +1,4 @@
+# A repository of its own using apigen: its workspace, its crate, its apigen.toml, its package
+[workspace]
+members = ["filters"]
+resolver = "2"

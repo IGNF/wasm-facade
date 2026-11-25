@@ -1,0 +1,15 @@
+{
+  "name": "apigen-repository",
+  "private": true,
+  "workspaces": ["npm"],
+  "scripts": {
+    "lint": "biome check .",
+    "typecheck": "tsc -p npm/tsconfig.json",
+    "test": "bun test npm",
+    "example:check": "cd examples/filters && bun ../../npm/src/cli.ts check"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.8",
+    "typescript": "~6.0.2"
+  }
+}

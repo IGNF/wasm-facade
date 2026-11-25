@@ -1,0 +1,14 @@
+# A conventional repository: the defaults but the extractor (here built from apigen's sources at the root;
+# `apigen` once installed), the converters and the wasm module
+
+extractor = ["cargo", "run", "-q", "--manifest-path", "../../Cargo.toml", "--"]
+converters = "src/converters.ts"
+wasm = "../pkg/filters.js"
+
+[format]
+".ts" = ["bunx", "biome", "check", "--write", "--stdin-file-path={name}"]
+
+[targets.typescript]
+[targets.react]
+[targets.reference]
+title = "filters"

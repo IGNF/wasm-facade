@@ -1,0 +1,40 @@
+[package]
+name = "apigen"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+# TODO before publishing: the repository's URL, and the name if `apigen` is taken (README, "Name")
+repository = "https://example.invalid/apigen"
+readme = "README.md"
+description = "A public API declared once in Rust with inert attributes, read into a versioned JSON file from which an idiomatic TypeScript facade over wasm-bindgen, its framework bindings and its reference are written"
+keywords = ["wasm-bindgen", "typescript", "codegen", "bindings", "api"]
+categories = ["development-tools::ffi", "wasm", "web-programming"]
+# What crates.io gets: the extractor, its schema, its tests (the npm package and the example are not the crate's)
+include = ["src/**", "data/**", "tests/**", "README.md", "LICENSE", "CHANGELOG.md"]
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "apigen"
+path = "src/main.rs"
+
+[dependencies]
+quote = "1"
+serde_json = "1"
+syn = { version = "2", default-features = false, features = ["full", "parsing", "printing"] }
+
+# One package; the example is a repository of its own (its own workspace)
+[workspace]
+exclude = ["examples"]
+
+[lints.rust]
+missing_docs = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+mod_module_files = "warn"

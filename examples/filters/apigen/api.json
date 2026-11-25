@@ -1,0 +1,222 @@
+{
+  "$comment": "Made by `apigen extract` from the workspace's declarations and the calls they name: not to edit",
+  "calls": {},
+  "items": [
+    {
+      "api": {
+        "class": true,
+        "options": "BlurOptions"
+      },
+      "doc": "A box blur, applied to RGBA pixels in place",
+      "kind": "class",
+      "methods": [
+        {
+          "api": {},
+          "async": false,
+          "doc": "A blur of this radius and edges",
+          "export": "new",
+          "flags": [
+            "constructor"
+          ],
+          "name": "new",
+          "params": [
+            {
+              "name": "radius",
+              "type": "f64"
+            },
+            {
+              "name": "edge",
+              "type": "Edge"
+            }
+          ],
+          "returns": "Blur"
+        },
+        {
+          "api": {},
+          "async": false,
+          "doc": "Its radius, pixels",
+          "export": "radius",
+          "flags": [
+            "getter"
+          ],
+          "name": "radius",
+          "params": [],
+          "returns": "f64"
+        },
+        {
+          "api": {},
+          "async": false,
+          "doc": "Changes its radius",
+          "export": "set_radius",
+          "flags": [
+            "setter"
+          ],
+          "name": "set_radius",
+          "params": [
+            {
+              "name": "radius",
+              "type": "f64"
+            }
+          ],
+          "returns": null
+        },
+        {
+          "api": {
+            "convert": "image=pixels"
+          },
+          "async": false,
+          "doc": "Blurs an image in place",
+          "export": "apply",
+          "flags": [],
+          "name": "apply",
+          "params": [
+            {
+              "name": "image",
+              "type": "&mut[u8]"
+            },
+            {
+              "name": "width",
+              "type": "u32"
+            },
+            {
+              "name": "height",
+              "type": "u32"
+            }
+          ],
+          "returns": null
+        },
+        {
+          "api": {},
+          "async": true,
+          "doc": "Blurs an image's copy once the browser is idle",
+          "export": "applyLater",
+          "flags": [],
+          "name": "apply_later",
+          "params": [
+            {
+              "name": "image",
+              "type": "Vec<u8>"
+            },
+            {
+              "name": "width",
+              "type": "u32"
+            },
+            {
+              "name": "height",
+              "type": "u32"
+            }
+          ],
+          "returns": "Vec<u8>"
+        },
+        {
+          "api": {
+            "callback": "(row: number) => boolean"
+          },
+          "async": false,
+          "doc": "Blurs the rows a predicate keeps",
+          "export": "applyWhere",
+          "flags": [],
+          "name": "apply_where",
+          "params": [
+            {
+              "name": "image",
+              "type": "&mut[u8]"
+            },
+            {
+              "name": "width",
+              "type": "u32"
+            },
+            {
+              "name": "keep",
+              "type": "&js_sys::Function"
+            }
+          ],
+          "returns": null
+        },
+        {
+          "api": {
+            "event": "progress",
+            "payload": "number"
+          },
+          "async": false,
+          "doc": "The share of the image blurred, 0 to 1",
+          "export": "onProgress",
+          "flags": [],
+          "name": "on_progress",
+          "params": [
+            {
+              "name": "listener",
+              "type": "js_sys::Function"
+            }
+          ],
+          "returns": null
+        }
+      ],
+      "name": "Blur"
+    },
+    {
+      "api": {
+        "options": true
+      },
+      "doc": "A blur's options",
+      "fields": [
+        {
+          "api": {
+            "default": "2"
+          },
+          "doc": "Its radius, pixels",
+          "name": "radius",
+          "type": "f64"
+        },
+        {
+          "api": {
+            "default": "'clamp'"
+          },
+          "doc": "How it reads past the edges",
+          "name": "edge",
+          "type": "Edge"
+        }
+      ],
+      "kind": "struct",
+      "name": "BlurOptions"
+    },
+    {
+      "api": {
+        "union": true
+      },
+      "doc": "How a filter reads past the image's edges",
+      "kind": "enum",
+      "name": "Edge",
+      "variants": [
+        {
+          "doc": "The nearest pixel inside",
+          "name": "Clamp"
+        },
+        {
+          "doc": "The pixel on the other side",
+          "name": "Wrap"
+        }
+      ]
+    },
+    {
+      "api": {
+        "convert": "image=pixels",
+        "function": true
+      },
+      "async": false,
+      "doc": "The histogram of an image's luminance: 256 counts",
+      "export": "histogram",
+      "flags": [],
+      "kind": "function",
+      "name": "histogram",
+      "params": [
+        {
+          "name": "image",
+          "type": "&[u8]"
+        }
+      ],
+      "returns": "Vec<u32>"
+    }
+  ],
+  "schema": 1
+}

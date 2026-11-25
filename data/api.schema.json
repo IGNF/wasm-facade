@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/apigen/data/api.schema.json",
+  "title": "apigen's API file, schema 1",
+  "description": "A public API declared in Rust, as `apigen extract` writes it: the declared items (the structs, enums, functions and impl blocks carrying the configured inert attribute), and the calls they name among the exported classes' methods. Version 1; a change that a reader of version 1 cannot read raises `schema`.",
+  "type": "object",
+  "required": ["schema", "items", "calls"],
+  "properties": {
+    "$comment": { "type": "string" },
+    "schema": { "const": 1 },
+    "items": {
+      "description": "The declarations, sorted by name",
+      "type": "array",
+      "items": { "$ref": "#/$defs/item" }
+    },
+    "calls": {
+      "description": "The calls the declarations name (by the configured `call_keys`), by their exported name",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/call" }
+    }
+  },
+  "$defs": {
+    "keys": {
+      "description": "An attribute's keys as written: `key = \"text\"`, `key = 3`, `key = true`, or a flag `key` (true)",
+      "type": "object",
+      "additionalProperties": { "type": ["string", "integer", "boolean", "null"] }
+    },
+    "param": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "description": "The Rust type as written, spaces only after commas", "type": "string" }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "required": ["name", "export", "doc", "params", "returns", "async", "flags", "api"],
+      "properties": {
+        "name": { "description": "Its Rust name", "type": "string" },
+        "export": { "description": "Its exported name (`js_name`), its Rust name else", "type": "string" },
+        "doc": { "type": "string" },
+        "params": { "type": "array", "items": { "$ref": "#/$defs/param" } },
+        "returns": { "type": ["string", "null"] },
+        "async": { "type": "boolean" },
+        "flags": {
+          "description": "The export attribute's flags: constructor, getter, setter…",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "api": { "$ref": "#/$defs/keys" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": ["kind", "name", "doc", "api"],
+      "properties": {
+        "kind": { "enum": ["struct", "enum", "function", "class"] },
+        "name": { "type": "string" },
+        "doc": { "description": "Its doc comment's lines, joined", "type": "string" },
+        "api": { "$ref": "#/$defs/keys" },
+        "fields": {
+          "description": "A struct's",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type", "doc", "api"],
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "doc": { "type": "string" },
+              "api": { "$ref": "#/$defs/keys" }
+            }
+          }
+        },
+        "variants": {
+          "description": "An enum's",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "doc"],
+            "properties": { "name": { "type": "string" }, "doc": { "type": "string" } }
+          }
+        },
+        "methods": { "description": "A class's", "type": "array", "items": { "$ref": "#/$defs/signature" } },
+        "export": { "description": "A function's (and its signature's other keys)", "type": "string" },
+        "params": { "type": "array", "items": { "$ref": "#/$defs/param" } },
+        "returns": { "type": ["string", "null"] },
+        "async": { "type": "boolean" },
+        "flags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "call": {
+      "type": "object",
+      "required": ["doc", "params"],
+      "properties": {
+        "doc": { "type": "string" },
+        "params": { "type": "array", "items": { "$ref": "#/$defs/param" } }
+      }
+    }
+  }
+}

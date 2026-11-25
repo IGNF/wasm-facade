@@ -1,0 +1,42 @@
+{
+  "name": "apigen",
+  "version": "0.1.0",
+  "description": "A public API declared once in Rust, written as an idiomatic TypeScript facade over its wasm-bindgen exports, React hooks, a reference, and any binding a plugin adds",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://example.invalid/apigen.git",
+    "directory": "npm"
+  },
+  "keywords": ["wasm", "wasm-bindgen", "rust", "typescript", "codegen", "bindings", "react"],
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.2"
+  },
+  "bin": {
+    "apigen": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "bun test",
+    "lint": "biome check .",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.8",
+    "@types/bun": "^1.4.4",
+    "@types/react": "^19.1.0",
+    "react": "^19.3.1",
+    "typescript": "~6.0.2"
+  }
+}
