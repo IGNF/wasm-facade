@@ -1,0 +1,59 @@
+name: Release
+
+# On a tag v<version>, once the crate of that version is on crates.io (`cargo publish`, PUBLISHING.md): the extractor
+# built for each platform, published as wasm-facade-<os>-<cpu>, then the wasm-facade package naming them as its
+# optional dependencies. Needs the NPM_TOKEN secret.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - { os: macos-14, target: aarch64-apple-darwin }
+          - { os: macos-14, target: x86_64-apple-darwin }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, musl: true }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, musl: true }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - if: matrix.musl
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/wasm-facade${{ runner.os == 'Windows' && '.exe' || '' }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          path: binaries
+      - name: The tag is the package's version
+        run: test "v$(node -p 'require("./npm/package.json").version')" = "${GITHUB_REF_NAME}"
+      - run: bun npm/scripts/platforms.ts binaries platforms
+      - name: The platform packages
+        run: for dir in platforms/*/; do npm publish --access public "$dir"; done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: bun install
+      - name: The main package
+        run: npm publish --access public
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

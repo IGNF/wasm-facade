@@ -28,11 +28,13 @@ anyone maintaining it by hand.
 ## Install
 
 ```sh
-cargo install wasm-facade --version 0.1.0 --locked   # the extractor: `wasm-facade extract`
-npm install -D wasm-facade@0.1.0                     # the generator: `npx wasm-facade generate` (or bun, pnpm, yarn)
+npm install -D wasm-facade@0.1.0   # `npx wasm-facade generate` (or bun, pnpm, yarn)
 ```
 
-The generator runs on Node 20+ and on Bun; the npm package will bring its extractor (#3).
+The generator runs on Node 20+ and on Bun. The package brings the extractor of its own version: prebuilt for macOS,
+Linux (x64, arm64) and Windows (x64) as an optional dependency (`wasm-facade-<os>-<cpu>`), else installed once by
+`cargo install wasm-facade --version <its version>` in `~/.cache/wasm-facade` (`WASM_FACADE_CACHE`) and reused. Nothing
+else to install, here or in CI.
 
 ## What a repository does
 
@@ -121,7 +123,7 @@ own types in `[types]`.
 
 | Key | Default | |
 | --- | --- | --- |
-| `extractor` | `["wasm-facade"]` | the command running the extractor (`["cargo", "run", "-q", "-p", "wasm-facade", "--"]` from sources) |
+| `extractor` | the package's own | the command running the extractor, to override it (`["cargo", "run", "-q", "-p", "wasm-facade", "--"]` from sources) |
 | `api` | `wasm-facade/api.json` | where the API is written (`[extract] out` wins) |
 | `wasm` | `./pkg/index.js` | the wasm-bindgen module, as the facade imports it |
 | `converters` | none | the converters' module, from the root |
