@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { configOf } from '../src/config.ts';
-import { cached, extractorOf, platformPackage } from '../src/extractor.ts';
+import { cached, extractorOf, platformDir, prebuilt } from '../src/extractor.ts';
 import { checkedApi, pyDoc, pyLiteral, pyTypeOf, tsTypeOf } from '../src/model.ts';
 import { region } from '../src/output.ts';
 import { classes, converters, functions, options, settingCalls, settings, unions } from '../src/patterns.ts';
@@ -208,7 +208,15 @@ test("the extractor: the configuration's if given, the package's own of its vers
   const config = configOf(repo);
 
   assert.deepEqual(extractorOf(config), config.extractor);
-  assert.equal(platformPackage('linux', 'arm64'), 'wasm-facade-linux-arm64');
+  assert.equal(platformDir('linux', 'arm64'), 'linux-arm64');
+
+  const pkg = mkdtempSync(join(tmpdir(), 'wasm-facade-'));
+  const exe = process.platform === 'win32' ? 'wasm-facade.exe' : 'wasm-facade';
+
+  assert.equal(prebuilt(pkg), undefined);
+  mkdirSync(join(pkg, 'bin', platformDir()), { recursive: true });
+  writeFileSync(join(pkg, 'bin', platformDir(), exe), '');
+  assert.equal(prebuilt(pkg), join(pkg, 'bin', platformDir(), exe));
   assert.ok(cached().endsWith(join('wasm-facade', VERSION)));
 });
 

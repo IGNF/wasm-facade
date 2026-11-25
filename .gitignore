@@ -2,6 +2,7 @@
 /examples/*/target
 node_modules
 /npm/dist
+/npm/bin
 Cargo.lock.bak
 .idea/
 /site/dist

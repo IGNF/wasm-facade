@@ -1,6 +1,6 @@
 /** wasm-facade's API for the plugins: the model, the generic patterns, the target interface, the regions and the runner */
 export { type Config, configOf, rootOf, type TargetConfig } from './config.ts';
-export { cached, extractorOf, platformPackage, prebuilt } from './extractor.ts';
+export { cached, extractorOf, platformDir, prebuilt } from './extractor.ts';
 export {
   type Api,
   type Attributes,
