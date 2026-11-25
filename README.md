@@ -58,7 +58,37 @@ The generator runs on Node 20+ and on Bun; the npm package will bring its extrac
 3. **Register converters** (optional): a module whose named exports take what the facade's user gives and return
    what the wasm module takes (`pixels(image: ImageData): Uint8Array`). A declaration names one by its name.
 
-4. **Run** `wasm-facade generate` after changing the declarations; `wasm-facade check` in the lint and CI.
+4. **Run** `wasm-facade generate` in the build (below), or after changing the declarations and `wasm-facade check` in
+   the lint and CI when the outputs are committed.
+
+## Generated on build
+
+`api.json` is the contract: committed, its diff shows an API change in review. What is generated from it need not be:
+
+```gitignore
+src/*.api.ts
+```
+
+```json
+{
+  "scripts": {
+    "postinstall": "wasm-facade generate --no-extract",
+    "build": "wasm-facade generate && tsc",
+    "dev": "wasm-facade generate --watch"
+  }
+}
+```
+
+- `generate` is incremental: when the API, `wasm-facade.toml`, the plugins (and the local modules they import), its
+  `inputs` and wasm-facade's version are those of its last run, and the files it wrote are still as written, it writes
+  nothing and runs no formatter. Its stamp is kept in `cache` (`node_modules/.cache/wasm-facade`).
+- `--no-extract` reads the committed `api.json` as it is, without the extractor: after an install, the editor sees
+  the types without Rust being built.
+- `--watch` generates again whenever a Rust file, the configuration or a plugin changes.
+- `--force` runs every target though nothing changed.
+
+`check` is then needed only by a repository that commits its outputs, and in CI after the build, where it fails if
+the committed `api.json` is not what the Rust declares.
 
 The declarations may live in any member of the Cargo workspace: every member is read (or `[extract] members`), so
 moving code between crates or folders changes nothing generated.
@@ -100,6 +130,8 @@ own types in `[types]`.
 | `[extract]` `export_attribute`, `export_name` | `wasm_bindgen`, `js_name` | how an export is recognized and named |
 | `[extract]` `members` | `"all"` | the members read, their folders |
 | `[types]` | | the project's Rust types in TypeScript (`Rgba = "[number, number, number, number]"`) |
+| `inputs` | none | files the plugins read besides their modules, in `generate`'s stamp |
+| `cache` | `node_modules/.cache/wasm-facade` | where `generate` keeps its stamp |
 | `[format]` | none | a formatter per extension, the text on its stdin (`".ts" = ["biome", "format", "--stdin-file-path={name}"]`) |
 | `[targets.<name>]` | | a target to run: built in (`typescript`, `react`, `reference`) or `plugin = "path.ts"`; `enabled = false` turns one off; the other keys are its options |
 

@@ -12,6 +12,8 @@ import { checkedApi, tsTypeOf } from '../src/model.ts';
 import { region } from '../src/output.ts';
 import { classes, converters, functions, options, unions } from '../src/patterns.ts';
 import { BUILT_IN, targetsOf } from '../src/run.ts';
+import { fresh, inputsOf, stamp } from '../src/stamp.ts';
+import { relevant } from '../src/watch.ts';
 
 /** How this runtime runs a TypeScript file: Bun as it is, Node by stripping its types */
 const TS = process.versions.bun ? [] : ['--experimental-strip-types', '--no-warnings'];
@@ -115,6 +117,36 @@ test("a plugin in TypeScript, loaded from the repository's root", async () => {
   const [loaded] = await targetsOf(configOf(dir));
 
   assert.equal(loaded?.target.name, 'mine');
+});
+
+test("generate's stamp: its inputs (a plugin and what it imports), its files as written", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'wasm-facade-'));
+  const write = (path: string, text: string) => writeFileSync(join(dir, path), text);
+
+  write('wasm-facade.toml', '[targets.mine]\nplugin = "mine.ts"\n');
+  write('mine.ts', "import { names } from './names';\nexport default { name: 'mine', outputs: () => [] };\n");
+  write('names.ts', 'export const names = [];\n');
+  write('api.json', '{}');
+  write('out.ts', 'made');
+
+  const config = { ...configOf(dir), api: 'api.json' };
+
+  assert.deepEqual(inputsOf(config), ['wasm-facade.toml', 'api.json', 'mine.ts', 'names.ts']);
+  assert.equal(fresh(config), false);
+  stamp(config, ['out.ts']);
+  assert.equal(fresh(config), true);
+  write('names.ts', 'export const names = [1];\n');
+  assert.equal(fresh(config), false, 'a module the plugin imports changed');
+  stamp(config, ['out.ts']);
+  write('out.ts', 'edited');
+  assert.equal(fresh(config), false, 'a file written was edited');
+});
+
+test('what the watch reacts to: Rust, the inputs; not the builds', () => {
+  assert.equal(relevant('crates/a/src/lib.rs', []), true);
+  assert.equal(relevant('wasm-facade.toml', ['wasm-facade.toml']), true);
+  assert.equal(relevant('target/debug/build/x.rs', []), false);
+  assert.equal(relevant('src/api.ts', ['wasm-facade.toml']), false);
 });
 
 test('a region replaced between its markers, the rest kept', () => {
