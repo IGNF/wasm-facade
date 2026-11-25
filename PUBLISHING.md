@@ -38,7 +38,7 @@ The core's own imports end in `.ts`: the build (`tsconfig.build.json`) rewrites 
 
 ## 4. Package metadata
 
-- [ ] `repository` in `Cargo.toml` and `npm/package.json` (placeholders `example.invalid`)
+- [x] `repository` and `homepage` in `Cargo.toml` and `npm/package.json` (github.com/IGNF/wasm-facade)
 - [ ] `LICENSE` copied into `npm/` at build (npm's `files` lists it)
 - [ ] the extractor's binary for users without Rust: `cargo install`, or prebuilt binaries (cargo-dist) the npm
       package downloads; until then the README says to install it with Cargo

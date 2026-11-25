@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "description": "A public API declared once in Rust, written as an idiomatic TypeScript facade over its wasm-bindgen exports, React hooks, a reference, and any binding a plugin adds",
   "license": "MIT",
+  "homepage": "https://ignf.github.io/wasm-facade/",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://example.invalid/wasm-facade.git",
+    "url": "git+https://github.com/IGNF/wasm-facade.git",
     "directory": "npm"
   },
   "keywords": [

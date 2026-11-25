@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
-# TODO before publishing: the repository's URL
-repository = "https://example.invalid/wasm-facade"
+repository = "https://github.com/IGNF/wasm-facade"
+homepage = "https://ignf.github.io/wasm-facade/"
 readme = "README.md"
 description = "A public API declared once in Rust with inert attributes, read into a versioned JSON file from which an idiomatic TypeScript facade over wasm-bindgen, its framework bindings and its reference are written"
 keywords = ["wasm-bindgen", "typescript", "codegen", "bindings", "api"]

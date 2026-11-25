@@ -5,6 +5,9 @@ over the crate's wasm-bindgen exports, React hooks, a Markdown reference, and an
 its first user, adds a Python widget, React Native and a web component). Change the Rust, run `wasm-facade generate`, and
 every binding follows; `wasm-facade check` in CI fails on any drift.
 
+
+Site, with a live demo: <https://ignf.github.io/wasm-facade/>
+
 ## Why: orval, for Rust and wasm
 
 [orval](https://orval.dev) reads an OpenAPI document and writes a typed client and TanStack Query hooks: the server's
