@@ -113,8 +113,7 @@ import { classes, type Target } from 'wasm-facade';
 const target: Target = {
   name: 'my-binding',
   outputs: ({ api, config, options }) => [
-    { path: 'src/generated.ts', text: classes(api).map((c) => `export const ${c.name}Name = '${c.name}';`).join('\n') },
-    { path: 'src/hand-written.ts', region: 'names', text: '…' }, // between `// <api:names>` and `// </api:names>`
+    { path: 'src/names.api.ts', text: classes(api).map((c) => `export const ${c.name}Name = '${c.name}';`).join('\n') },
   ],
   command: (context, check) => ({ run: ['my-script', ...(check ? ['--check'] : [])] }), // optional, after the writes
 };
@@ -126,10 +125,39 @@ A plugin may be written in TypeScript: Bun and Node 23.6+ load it as it is; on N
 `node --experimental-strip-types` (22.6+) or through a loader (`npx tsx node_modules/wasm-facade/dist/cli.js generate`),
 or write the plugin in JavaScript.
 
-`outputs` returns whole files or regions of hand-written files (the lines between `// <api:name>` and
-`// </api:name>`, `#` in Python). A target reads the API through the patterns (`classes`, `functions`, `options`,
+`outputs` returns whole files. A target reads the API through the patterns (`classes`, `functions`, `options`,
 `unions`, `converters` from `wasm-facade`) or its own; no target imports another. The file it reads, `api.json`, is
 described by `data/api.schema.json`.
+
+### Generated beside hand-written code: whole files
+
+A generated file is never edited, so a repository can leave it out of git (`*.api.ts` in `.gitignore`) and a reader
+knows which lines are whose. Where generated code meets hand-written code, the hand-written side extends it:
+
+- **Class members**: the generated methods go in a base class the hand-written class extends. In TypeScript an
+  abstract class, declaring the protected members its methods need; in Python a mixin.
+
+  ```ts
+  // map.api.ts, generated
+  export abstract class MapApi {
+    protected abstract readonly engine: Engine;
+    protected abstract requestRender(): void;
+    /** The map's lowest zoom */
+    setMinZoom(zoom: number): this { this.engine.set_min_zoom(zoom); this.requestRender(); return this; }
+  }
+
+  // map.ts, by hand
+  export class Map extends MapApi { protected readonly engine = new Engine(); protected requestRender() { … } }
+  ```
+
+- **Option fields**: the generated fields go in an interface the hand-written one extends
+  (`interface MapOptions extends MapSettings { container: HTMLElement }`).
+- **Table entries**: the generated entries are exported constants the hand-written table spreads
+  (`{ ...LIVE_SETTINGS, container: … }`, `[...SETTING_ATTRIBUTES, 'src']`).
+
+A region of a hand-written file is still supported, for a file that cannot be split: an output with `region: 'name'`
+replaces the lines between `// <api:name>` and `// </api:name>` (`#` in Python). Such a file mixes both and stays in
+git.
 
 ## The example
 
