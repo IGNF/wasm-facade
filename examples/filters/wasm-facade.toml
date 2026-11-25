@@ -6,7 +6,7 @@ converters = "src/converters.ts"
 wasm = "../pkg/filters.js"
 
 [format]
-".ts" = ["bunx", "biome", "check", "--write", "--stdin-file-path={name}"]
+".ts" = ["npx", "--no-install", "biome", "check", "--write", "--stdin-file-path={name}"]
 
 [targets.typescript]
 [targets.react]
