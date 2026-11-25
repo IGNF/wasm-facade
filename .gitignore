@@ -7,3 +7,6 @@ Cargo.lock.bak
 /site/dist
 /examples/filters/pkg/*
 !/examples/filters/pkg/filters.d.ts
+
+# Local secrets (the crates.io token)
+.env

@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [0.1.0] - not released
+## [0.1.0] - 2026-11-25
 
 First version, taken out of isard (its `crates/apigen` and `packages/apigen`, branch `api-gen-proto`, 2026-11-24).
 

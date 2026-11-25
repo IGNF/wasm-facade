@@ -27,14 +27,12 @@ anyone maintaining it by hand.
 
 ## Install
 
-Not published yet. From this repository:
-
 ```sh
-cargo install --path .        # the extractor: `wasm-facade extract`
-cd npm && bun install         # the generator: `bun src/cli.ts generate`
+cargo install wasm-facade --version 0.1.0 --locked   # the extractor: `wasm-facade extract`
+bun add -d wasm-facade@0.1.0                         # the generator: `bunx wasm-facade generate`
 ```
 
-Once published: `cargo install <name>` and `npm install -D <name>` (then `npx <name> generate`).
+The generator runs on Bun for now (Node: #4); the npm package will bring its extractor (#3).
 
 ## What a repository does
 
