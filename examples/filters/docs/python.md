@@ -27,6 +27,16 @@ A blur's preview: an image on a canvas, blurred as it is shown
 - `show(image: Any, options: BlurOptions | None = None)` → `Awaitable[None]`: Shows an image, blurred by the options given (the blur's defaults else)
 - `fade_to(radius: float, duration: float | None = None)` → `Awaitable[None]`: Moves the blur's radius to `radius` over `duration` milliseconds (300 by default)
 - `pixels()` → `bytes | Sequence[int]`: The pixels shown, RGBA
+- `snapshot()` → `Snapshot`: What it shows
+- `clear()` → `None`: Shows nothing
+- `on("shown", listener)`: An image shown
+- `on("radiuschange", listener)`: The radius at each step of an animation
+- `on("cleared", listener)`: The preview cleared
+
+## Records
+
+- `Size` (a tuple): `width` (`int`), `height` (`int`). A width and a height, pixels
+- `Snapshot`: `size` (`Size`), `radius` (`float`), `shownAt` (`float | None`). What the preview shows
 
 ## Options
 

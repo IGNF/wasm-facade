@@ -29,6 +29,8 @@ fn the_example_repository_reads_as_its_api_json() {
             .iter()
             .map(|i| i["kind"].as_str().unwrap())
             .collect::<Vec<_>>(),
-        ["class", "struct", "enum", "host", "function"]
+        [
+            "class", "struct", "enum", "enum", "host", "struct", "struct", "function"
+        ]
     );
 }

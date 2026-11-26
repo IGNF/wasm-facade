@@ -11,6 +11,17 @@
   `abstract class <Host>Api` (tsc checks the hand-written class against it), Python a mixin, React Native its names,
   the references their sections. The example's `Preview` is one.
 - A declared options struct is a type parameters may take: `<Options>Init` in TypeScript, its `TypedDict` in Python.
+- Records (#7): a struct with `api(record)`, a structured value a method returns: an interface of read-only fields (an
+  `Option` one optional), a tuple struct a labelled tuple (`label`); a `TypedDict` or a `tuple` in Python. The
+  extractor reads a tuple struct's fields by position.
+- Events (#7): an enum with `api(events, host = "<class>")`, each variant an event (named by the variant in lowercase,
+  or `name`; its payload its one field). The facade writes `<Host>Events` and the host's typed `on` and protected
+  `emit`; Python an `on`, React Native `<HOST>_EVENTS`, the web component the DOM names (`EVENTS`, `prefix`), the
+  references their lists. The extractor reads a variant's keys and fields.
+
+### Fixed
+
+- `kebab` of a capitalized name has no leading dash (`Preview`: `preview`).
 
 ## [0.2.1] - 2026-11-26
 

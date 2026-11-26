@@ -4,7 +4,17 @@
  */
 import type { Config } from '../config.ts';
 import { type Api, camel, type Signature, tsTypeOf } from '../model.ts';
-import { type Class, classes, functions, hosts, type Options, options, unions } from '../patterns.ts';
+import {
+  type Class,
+  classes,
+  eventsOf,
+  functions,
+  hosts,
+  type Options,
+  options,
+  records,
+  unions,
+} from '../patterns.ts';
 import { type Context, type Output, option, type Target } from '../target.ts';
 
 const line = (doc: string): string => doc.split('\n').join(' ');
@@ -84,6 +94,28 @@ export const reference: Target = {
 
           return `- \`${m.name}(${params})\` → \`${m.async || m.animation ? `Promise<${result}>` : result}\`: ${line(m.doc)}${m.animation ? ' (resolved once the animation ends)' : ''}`;
         }),
+        '',
+        ...(eventsOf(api, h.name)
+          ? [
+              'Events (`on(type, listener)`, returning what stops it):',
+              '',
+              ...(eventsOf(api, h.name)?.events ?? []).map(
+                (e) =>
+                  `- \`${e.name}\` (\`${e.ts ?? (e.payload ? tsTypeOf(api, e.payload, config.types) : 'undefined')}\`)${e.doc ? `: ${line(e.doc)}` : ''}`,
+              ),
+              '',
+            ]
+          : []),
+      ]),
+      ...(records(api).length ? ['## Records', ''] : []),
+      ...records(api).flatMap((r) => [
+        `### \`${r.name}\``,
+        '',
+        ...(r.doc ? [line(r.doc), ''] : []),
+        ...r.fields.map(
+          (f) =>
+            `- \`${f.name}${f.optional ? '?' : ''}\` (\`${f.ts ?? tsTypeOf(api, f.rust.replace(/^Option<(.*)>$/, '$1'), config.types)}\`)${f.doc ? `: ${line(f.doc)}` : ''}`,
+        ),
         '',
       ]),
       ...(options(api).length

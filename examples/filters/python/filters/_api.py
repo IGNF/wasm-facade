@@ -72,6 +72,23 @@ def blur_options(
     return cast(BlurOptions, {key: value for key, value in given.items() if value is not UNSET})
 
 
+Size = tuple[int, int]
+"""A width and a height, pixels: width, height"""
+
+
+class Snapshot(TypedDict):
+    """What the preview shows
+
+    size: The image's size, pixels
+    radius: The blur's radius, pixels
+    shownAt: When it was shown (`performance.now()`), if it was
+    """
+
+    size: Size
+    radius: float
+    shownAt: float | None
+
+
 class FunctionsApi(Transport):
     """The functions, over what the class inheriting them gives"""
 
@@ -124,3 +141,16 @@ class PreviewApi(Transport):
     def pixels(self) -> bytes | Sequence[int]:
         """The pixels shown, RGBA"""
         return self._call("pixels")
+
+    def snapshot(self) -> Snapshot:
+        """What it shows"""
+        return self._call("snapshot")
+
+    def clear(self) -> None:
+        """Shows nothing"""
+        return self._call("clear")
+
+    def on(self, event: Literal["shown", "radiuschange", "cleared"], listener: Callable[[Any], None]) -> Callable[[], None]:
+        """Listens to an event ("shown": An image shown; "radiuschange": The radius at each step of an animation;
+        "cleared": The preview cleared), returns what stops it"""
+        return self._on(event, listener)

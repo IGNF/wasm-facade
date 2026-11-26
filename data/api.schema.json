@@ -25,6 +25,16 @@
       "type": "object",
       "additionalProperties": { "type": ["string", "integer", "boolean", "null"] }
     },
+    "field": {
+      "type": "object",
+      "required": ["name", "type", "doc", "api"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "doc": { "type": "string" },
+        "api": { "$ref": "#/$defs/keys" }
+      }
+    },
     "param": {
       "type": "object",
       "required": ["name", "type"],
@@ -67,18 +77,9 @@
         "doc": { "description": "Its doc comment's lines, joined", "type": "string" },
         "api": { "$ref": "#/$defs/keys" },
         "fields": {
-          "description": "A struct's",
+          "description": "A struct's; a tuple struct's named by position (`0`, `1`…)",
           "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["name", "type", "doc", "api"],
-            "properties": {
-              "name": { "type": "string" },
-              "type": { "type": "string" },
-              "doc": { "type": "string" },
-              "api": { "$ref": "#/$defs/keys" }
-            }
-          }
+          "items": { "$ref": "#/$defs/field" }
         },
         "variants": {
           "description": "An enum's",
@@ -86,7 +87,16 @@
           "items": {
             "type": "object",
             "required": ["name", "doc"],
-            "properties": { "name": { "type": "string" }, "doc": { "type": "string" } }
+            "properties": {
+              "name": { "type": "string" },
+              "doc": { "type": "string" },
+              "api": { "description": "Its keys, where it has some", "$ref": "#/$defs/keys" },
+              "fields": {
+                "description": "Its fields (an event's payload), where it has some; a tuple's named by position",
+                "type": "array",
+                "items": { "$ref": "#/$defs/field" }
+              }
+            }
           }
         },
         "methods": {

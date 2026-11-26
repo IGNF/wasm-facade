@@ -27,15 +27,18 @@ import {
   wrap,
 } from '../model.ts';
 import {
+  type ApiRecord,
   type Class,
   classes,
   converters,
+  eventsOf,
   functions,
   type Host,
   type HostMethod,
   hosts,
   type Options,
   options,
+  records,
   type Setting,
   settings,
   unions,
@@ -219,14 +222,56 @@ const hostMethod = (api: Api, types: Types, m: HostMethod): string[] => {
   ];
 };
 
-/** A host's mixin: the methods of the hand-written class, carried by name to it */
-const hostPart = (api: Api, types: Types, h: Host): string[] => [
-  `class ${h.name}Api(Transport):`,
-  ...docstring('    ', `${h.doc || `The methods of \`${h.name}\``}: over what the class inheriting them gives`),
-  '',
-  ...(h.methods.length ? h.methods.flatMap((m) => [...hostMethod(api, types, m), '']) : ['    pass', '']),
-  '',
-];
+/** A record: a `TypedDict` (an `Option` field `T | None`), a tuple struct a tuple */
+const recordPart = (api: Api, types: Types, r: ApiRecord): string[] => {
+  const hint = (f: ApiRecord['fields'][number]) => f.py ?? pyTypeOf(api, f.rust, types);
+
+  if (r.tuple)
+    return [
+      `${r.name} = tuple[${r.fields.map(hint).join(', ')}]`,
+      ...docstring('', `${r.doc || r.name}: ${r.fields.map((f) => f.name.replace(/^_/, '')).join(', ')}`),
+      '',
+      '',
+    ];
+
+  return [
+    `class ${r.name}(TypedDict):`,
+    ...docstring(
+      '    ',
+      r.doc || r.name,
+      r.fields.map((f) => ({ name: f.name, doc: f.doc })),
+    ),
+    '',
+    ...r.fields.map((f) => `    ${f.name}: ${hint(f)}`),
+    '',
+    '',
+  ];
+};
+
+/** A host's mixin: the methods of the hand-written class, carried by name to it; its events' `on` */
+const hostPart = (api: Api, types: Types, h: Host): string[] => {
+  const own = eventsOf(api, h.name);
+  const on = own
+    ? [
+        `    def on(self, event: Literal[${own.events.map((e) => `"${e.name}"`).join(', ')}], listener: Callable[[Any], None]) -> Callable[[], None]:`,
+        ...docstring(
+          '        ',
+          `Listens to an event (${own.events.map((e) => `"${e.name}": ${e.doc || 'no payload'}`).join('; ')}), returns what stops it`,
+        ),
+        '        return self._on(event, listener)',
+        '',
+      ]
+    : [];
+  const members = [...h.methods.flatMap((m) => [...hostMethod(api, types, m), '']), ...on];
+
+  return [
+    `class ${h.name}Api(Transport):`,
+    ...docstring('    ', `${h.doc || `The methods of \`${h.name}\``}: over what the class inheriting them gives`),
+    '',
+    ...(members.length ? members : ['    pass', '']),
+    '',
+  ];
+};
 
 const functionsPart = (api: Api, types: Types, name: string): string[] => {
   const fns = functions(api);
@@ -261,6 +306,7 @@ export const file = (api: Api, own: Context['options']): string => {
   const body = [
     ...unionsPart(api),
     ...options(api).flatMap((o) => optionsPart(api, types, o)),
+    ...records(api).flatMap((r) => recordPart(api, types, r)),
     ...functionsPart(api, types, option(own, 'functions', 'FunctionsApi')),
     ...classes(api).flatMap((c) => classPart(api, types, c)),
     ...hosts(api).flatMap((h) => hostPart(api, types, h)),

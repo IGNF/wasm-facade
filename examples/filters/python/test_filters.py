@@ -17,7 +17,8 @@ def test() -> None:
     preview = Preview()
     preview.show(b"", blur_options(radius=2))
     preview.fade_to(4)
-    assert preview.calls == [("show", (b"", {"radius": 2})), ("fadeTo", (4, None))]
+    preview.on("shown", print)
+    assert preview.calls == [("show", (b"", {"radius": 2})), ("fadeTo", (4, None)), ("on", ("shown",))]
 
     filters = Filters()
     filters.histogram(b"")
