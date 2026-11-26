@@ -34,18 +34,7 @@ pub fn items(config: &Config, items: &[Item]) -> Vec<Value> {
 fn declared(config: &Config, item: &Item) -> Option<Value> {
     match item {
         Item::Struct(s) => {
-            let fields: Vec<Value> = s
-                .fields
-                .iter()
-                .filter_map(|field| {
-                    Some(json!({
-                        "name": field.ident.as_ref()?.to_string(),
-                        "type": type_text(&field.ty),
-                        "doc": doc(&field.attrs),
-                        "api": keys(config, &field.attrs),
-                    }))
-                })
-                .collect();
+            let fields = fields(config, &s.fields);
 
             Some(json!({
                 "kind": "struct",
@@ -59,7 +48,21 @@ fn declared(config: &Config, item: &Item) -> Option<Value> {
             let variants: Vec<Value> = e
                 .variants
                 .iter()
-                .map(|v| json!({ "name": v.ident.to_string(), "doc": doc(&v.attrs) }))
+                .map(|v| {
+                    let mut variant = json!({ "name": v.ident.to_string(), "doc": doc(&v.attrs) });
+                    let keys = keys(config, &v.attrs);
+                    let fields = fields(config, &v.fields);
+
+                    // A variant's keys and its fields (an event's payload), only where it has some
+                    if keys.as_object().is_some_and(|k| !k.is_empty()) {
+                        variant["api"] = keys;
+                    }
+                    if !fields.is_empty() {
+                        variant["fields"] = json!(fields);
+                    }
+
+                    variant
+                })
                 .collect();
 
             Some(json!({
@@ -130,6 +133,22 @@ fn declared(config: &Config, item: &Item) -> Option<Value> {
         }
         _ => None,
     }
+}
+
+/// A struct's or a variant's fields: their name (a tuple's by position, `0`, `1`…), type, documentation and keys
+fn fields(config: &Config, fields: &syn::Fields) -> Vec<Value> {
+    fields
+        .iter()
+        .enumerate()
+        .map(|(i, field)| {
+            json!({
+                "name": field.ident.as_ref().map_or_else(|| i.to_string(), ToString::to_string),
+                "type": type_text(&field.ty),
+                "doc": doc(&field.attrs),
+                "api": keys(config, &field.attrs),
+            })
+        })
+        .collect()
 }
 
 /// A function's or a method's name, exported name, documentation, parameters (name, type), result, whether it is
@@ -458,6 +477,31 @@ mod tests {
         assert_eq!(host["methods"][0]["params"][1]["api"]["ts"], "number");
         assert_eq!(host["methods"][1]["async"], true);
         assert_eq!(host["methods"][1]["returns"], "Snapshot");
+    }
+
+    #[test]
+    fn reads_a_tuple_struct_by_position_and_a_variant_s_payload_and_keys() {
+        let file: syn::File = syn::parse_str(
+            r#"#[api(record)]
+            pub struct Point(#[api(label = "x")] f64, f64);
+            #[api(events, host = "Preview")]
+            pub enum PreviewEvent {
+                /// Shown
+                #[api(name = "shown")]
+                Shown(Snapshot),
+                Cleared,
+            }"#,
+        )
+        .unwrap();
+        let found = items(&config(), &file.items);
+
+        assert_eq!(found[0]["fields"][0]["name"], "0");
+        assert_eq!(found[0]["fields"][0]["api"]["label"], "x");
+        assert_eq!(found[0]["fields"][1]["type"], "f64");
+        assert_eq!(found[1]["variants"][0]["api"]["name"], "shown");
+        assert_eq!(found[1]["variants"][0]["fields"][0]["type"], "Snapshot");
+        assert_eq!(found[1]["variants"][1].get("fields"), None);
+        assert_eq!(found[1]["variants"][1].get("api"), None);
     }
 
     #[test]

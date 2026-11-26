@@ -13,4 +13,7 @@ export const BLUR_PROPERTIES = ['radius'] as const;
 export const BLUR_EVENTS = ['progress'] as const;
 
 /** `Preview`'s methods, written by hand */
-export const PREVIEW_METHODS = ['show', 'fadeTo', 'pixels'] as const;
+export const PREVIEW_METHODS = ['show', 'fadeTo', 'pixels', 'snapshot', 'clear'] as const;
+
+/** `Preview`'s events */
+export const PREVIEW_EVENTS = ['shown', 'radiuschange', 'cleared'] as const;

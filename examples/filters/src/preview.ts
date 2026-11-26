@@ -1,12 +1,13 @@
 /** The blur's preview, written by hand: its methods are declared in Rust (`PreviewHost`, filters/src/lib.rs) and
  * `PreviewApi` (the facade, generated) makes tsc check that they are the ones declared */
-import { Blur, type BlurOptionsInit, PreviewApi } from './api.ts';
+import { Blur, type BlurOptionsInit, PreviewApi, type Snapshot } from './api.ts';
 
 export class Preview extends PreviewApi {
   readonly #context: CanvasRenderingContext2D;
   #blur = new Blur();
   #image: ImageData | undefined;
   #shown: ImageData | undefined;
+  #shownAt: number | undefined;
   /** The animation running, stopped by the next one */
   #frame = 0;
 
@@ -20,6 +21,8 @@ export class Preview extends PreviewApi {
     this.#blur = new Blur(options);
     this.#image = image;
     await this.#draw();
+    this.#shownAt = performance.now();
+    this.emit('shown', this.snapshot());
   }
 
   fadeTo(radius: number, duration = 300): Promise<void> {
@@ -34,6 +37,7 @@ export class Preview extends PreviewApi {
 
         this.#blur.radius = from + (radius - from) * t;
         void this.#draw();
+        this.emit('radiuschange', this.#blur.radius);
         if (t < 1) this.#frame = requestAnimationFrame(step);
         else resolve();
       };
@@ -44,6 +48,22 @@ export class Preview extends PreviewApi {
 
   pixels(): Uint8Array {
     return new Uint8Array(this.#shown?.data ?? []);
+  }
+
+  snapshot(): Snapshot {
+    return {
+      size: [this.#shown?.width ?? 0, this.#shown?.height ?? 0],
+      radius: this.#blur.radius,
+      ...(this.#shownAt === undefined ? {} : { shownAt: this.#shownAt }),
+    };
+  }
+
+  clear(): void {
+    this.#image = undefined;
+    this.#shown = undefined;
+    this.#shownAt = undefined;
+    this.#context.clearRect(0, 0, this.#context.canvas.width, this.#context.canvas.height);
+    this.emit('cleared', undefined);
   }
 
   /** The image blurred into the canvas */

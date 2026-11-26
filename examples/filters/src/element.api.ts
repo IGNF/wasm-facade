@@ -19,3 +19,10 @@ export const attributeValue = (name: Attribute, text: string | null): number | b
 
   return text;
 };
+
+/** Each host event and the DOM event the element dispatches for it (its payload the event's `detail`) */
+export const EVENTS = {
+  shown: 'preview-shown',
+  radiuschange: 'preview-radiuschange',
+  cleared: 'preview-cleared',
+} as const;

@@ -42,7 +42,8 @@ export interface Declared {
   doc: string;
   api: Attributes;
   fields?: Field[];
-  variants?: { name: string; doc: string }[];
+  /** An enum's variants: their keys and fields (an event's payload) where they have some */
+  variants?: { name: string; doc: string; api?: Attributes; fields?: Field[] }[];
   methods?: Signature[];
   /** A function's */
   export?: string;
@@ -88,8 +89,8 @@ export const camel = (name: string): string => name.replace(/_([a-z0-9])/g, (_, 
 /** `strokeColor` as Python names it: `stroke_color` */
 export const snake = (name: string): string => name.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 
-/** `minZoom` as an element's attribute names it: `min-zoom` */
-export const kebab = (name: string): string => snake(camel(name)).replaceAll('_', '-');
+/** `minZoom` as an element's attribute names it: `min-zoom` (`Preview`: `preview`) */
+export const kebab = (name: string): string => snake(camel(name)).replace(/^_/, '').replaceAll('_', '-');
 
 export const lowerFirst = (name: string): string => name.charAt(0).toLowerCase() + name.slice(1);
 export const upperFirst = (name: string): string => name.charAt(0).toUpperCase() + name.slice(1);
@@ -190,8 +191,9 @@ export const tsTypeOf = (api: Api, rust: string, types: Record<string, string> =
   const declared = enumOf(api, ty);
 
   if (declared) return declared.name;
-  // A declared struct the facade writes as an interface: options (given as their `Init`, defaults left out)
+  // A declared struct the facade writes: options (given as their `Init`, defaults left out), a record
   if (api.items.some((item) => item.kind === 'struct' && item.name === ty && item.api.options)) return `${ty}Init`;
+  if (api.items.some((item) => item.kind === 'struct' && item.name === ty && item.api.record)) return ty;
   throw new Error(`wasm-facade: no TypeScript for the Rust type ${rust}: give it in wasm-facade.toml's [types]`);
 };
 
@@ -231,8 +233,9 @@ export const pyTypeOf = (api: Api, rust: string, types: Record<string, string> =
   const declared = enumOf(api, ty);
 
   if (declared) return declared.name;
-  // A declared options struct: its `TypedDict`, every key optional
-  if (api.items.some((item) => item.kind === 'struct' && item.name === ty && item.api.options)) return ty;
+  // A declared options struct (its `TypedDict`, every key optional) or a record
+  if (api.items.some((item) => item.kind === 'struct' && item.name === ty && (item.api.options || item.api.record)))
+    return ty;
   throw new Error(`wasm-facade: no Python for the Rust type ${rust}: give it in [targets.python.types]`);
 };
 

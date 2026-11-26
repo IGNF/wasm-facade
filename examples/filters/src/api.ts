@@ -99,8 +99,58 @@ export class Blur {
   }
 }
 
+/** A width and a height, pixels */
+export type Size = [width: number, height: number];
+
+/** What the preview shows */
+export interface Snapshot {
+  /** The image's size, pixels */
+  readonly size: Size;
+  /** The blur's radius, pixels */
+  readonly radius: number;
+  /** When it was shown (`performance.now()`), if it was */
+  readonly shownAt?: number;
+}
+
+/** What the preview tells its listeners */
+export interface PreviewEvents {
+  /** An image shown */
+  shown: Snapshot;
+  /** The radius at each step of an animation */
+  radiuschange: number;
+  /** The preview cleared */
+  cleared: undefined;
+}
+
 /** A blur's preview: an image on a canvas, blurred as it is shown */
 export abstract class PreviewApi {
+  readonly #listeners = new Map<keyof PreviewEvents, Set<(event: never) => void>>();
+
+  /** Listens to an event; returns the function that stops listening */
+  on<K extends keyof PreviewEvents>(type: K, listener: (event: PreviewEvents[K]) => void): () => void {
+    const listeners = this.#listeners.get(type) ?? new Set();
+    const added = listener as (event: never) => void;
+
+    this.#listeners.set(type, listeners.add(added));
+
+    return () => {
+      listeners.delete(added);
+    };
+  }
+
+  /** Calls the listeners of an event; one that throws is reported, and does not stop the others */
+  protected emit<K extends keyof PreviewEvents>(type: K, event: PreviewEvents[K]): void {
+    for (const listener of [...(this.#listeners.get(type) ?? [])]) {
+      try {
+        (listener as (event: PreviewEvents[K]) => void)(event);
+      } catch (error) {
+        queueMicrotask(() => {
+          throw error;
+        });
+      }
+    }
+  }
+
   /** Shows an image, blurred by the options given (the blur's defaults else) */
   abstract show(image: ImageData, options?: BlurOptionsInit): Promise<void>;
   /** Moves the blur's radius to `radius` over `duration` milliseconds (300 by default)
@@ -109,4 +159,8 @@ export abstract class PreviewApi {
   abstract fadeTo(radius: number, duration?: number): Promise<void>;
   /** The pixels shown, RGBA */
   abstract pixels(): Uint8Array;
+  /** What it shows */
+  abstract snapshot(): Snapshot;
+  /** Shows nothing */
+  abstract clear(): void;
 }

@@ -117,6 +117,8 @@ own patterns read theirs.
 | a parameter given through a converter | `convert = "image=pixels, …"` | the parameter typed as the converter's parameter |
 | a result through a converter | `result = "toImage"` | typed as the converter's result |
 | `#[cfg(wasm_facade)] trait PreviewHost { … }` | `host = "Preview"`; on a method `animation`, `export`, `ts`, `py`; on a parameter `ts`, `py` | `abstract class PreviewApi`: the methods of a class written by hand (below) |
+| `struct Snapshot { radius: f64 }`, `struct Size(u32, u32)` | `record`; on a field `ts`, `py`, a tuple's `label` | `interface Snapshot { readonly radius: number }`, `type Size = [width: number, height: number]`; a `TypedDict`, a `tuple` in Python |
+| `enum PreviewEvent { Shown(Snapshot), Cleared }` | `events`, `host = "Preview"`; on a variant `name`, `ts`, `py` | `interface PreviewEvents { shown: Snapshot; cleared: undefined }`, the host's `on` and `emit` |
 | `struct ViewSettings { min_zoom: f64 }` | `settings`; on a field `call = "setZoomRange"`, `getter`, `store`, `spread`, `convert`, `default` | each field a setting of a host class (`setMinZoom`, `getMinZoom`): read by the `web-component`, `react-native` and `python` targets and by plugins |
 
 Names: `snake_case` becomes `camelCase`; exported names are wasm-bindgen's `js_name`. A class's documentation is its
@@ -150,9 +152,9 @@ from the same `api.json`:
 
 | Target | Writes (default `out`) | |
 | --- | --- | --- |
-| `typescript` | the facade (`src/api.ts`) | unions, options with defaults, functions, classes, events, converters, hosts' abstract classes |
+| `typescript` | the facade (`src/api.ts`) | unions, options with defaults, functions, classes, events, converters, records, hosts' abstract classes and their events |
 | `react` | hooks over the facade (`src/hooks.ts`; `facade`) | `useBlur(options)`, `useBlurEvent(blur, type, listener)` |
-| `web-component` | a custom element's attributes (`src/element.api.ts`; `from`, the structs, default the settings) | `ATTRIBUTES` (`'max-pitch'` → `maxPitch`, a number, a flag or text), `attributeValue(name, text)` |
+| `web-component` | a custom element's attributes and events (`src/element.api.ts`; `from`, the structs, default the settings; `host`, `prefix`) | `ATTRIBUTES` (`'max-pitch'` → `maxPitch`, a number, a flag or text), `attributeValue(name, text)`, `EVENTS` (`shown` → `'preview-shown'`) |
 | `react-native` | the names a bridge exposes (`src/native.api.ts`) | each class's methods, properties and events, the functions, the settings' setters and getters |
 | `python` | the Python API (`python/_api.py`; `title`, `types`, `functions`) | `Literal` unions, `TypedDict` options with their defaults and keyword functions, a mixin per class, settings struct and the functions |
 | `reference` | the reference (`docs/api.md`; `title`) | |
@@ -196,6 +198,16 @@ export class Preview extends PreviewApi { … }
 
 Every other binding takes them as it takes the rest: Python's `PreviewApi` mixin, React Native's `PREVIEW_METHODS`, the
 references. Trailing `Option` parameters may be left out; `animation` returns a promise resolved once it ends.
+
+What the methods return and what the host tells are declared beside it, in Rust never compiled too:
+
+- **Records**, the structured values a method returns (`api(record)`): an interface of read-only fields, an `Option`
+  one optional; a tuple struct a labelled tuple (`Size(#[api(label = "width")] u32, …)`). A `TypedDict` or a `tuple`
+  in Python.
+- **Events** (`api(events, host = "Preview")` on an enum): each variant an event, named by the variant in lowercase
+  (or `name`), its payload its one field. The host's base class gets a typed `on(type, listener)` and a protected
+  `emit(type, event)` (a listener that throws is reported, the others still called); Python an `on`, React Native its
+  `PREVIEW_EVENTS`, the web component the DOM names it dispatches (`EVENTS`: `preview-shown`).
 
 ### Python: one API, its transport the project's
 
@@ -275,7 +287,8 @@ git.
 
 `examples/filters` is a repository of its own using wasm-facade: an image-filters crate (`filters/src/lib.rs`, every
 pattern above but the settings), its `wasm-facade.toml` (every built-in target), its converters, its hand-written
-`Preview` (`src/preview.ts`, extending the generated `PreviewApi`), and what wasm-facade writes from them, committed so
+`Preview` (`src/preview.ts`, extending the generated `PreviewApi`: its methods, its `Snapshot` record, its events), and
+what wasm-facade writes from them, committed so
 that `check` shows any drift:
 
 - `src/api.ts` (the facade), `src/hooks.ts` (`useBlur`, `useBlurEvent`), `src/element.api.ts`, `src/native.api.ts`;

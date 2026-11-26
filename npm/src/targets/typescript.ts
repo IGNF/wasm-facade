@@ -17,16 +17,20 @@ import {
   tsTypeOf,
 } from '../model.ts';
 import {
+  type ApiRecord,
   type Class,
   classes,
   converters,
   eventsName,
+  eventsOf,
   functions,
   type Host,
+  type HostEvents,
   type HostMethod,
   hosts,
   type Options,
   options,
+  records,
   type Union,
   unions,
 } from '../patterns.ts';
@@ -242,18 +246,88 @@ const hostSignature = (api: Api, config: Config, m: HostMethod): string => {
   return `(${params.join(', ')}): ${m.async || m.animation ? `Promise<${result}>` : result}`;
 };
 
-/** A host's base class: each method declared, the hand-written class (`class Preview extends PreviewApi`)
- * implementing them; tsc fails where it does not follow the declarations */
-const hostCode = (api: Api, config: Config, h: Host): string[] => [
-  tsDoc(h.doc || `The methods declared for ${h.name}: the hand-written class implements them`),
-  `export abstract class ${h.name}Api {`,
-  ...h.methods.flatMap((m) => [
-    tsDoc(m.animation ? `${m.doc}\n\nResolved once the animation ends` : m.doc, '  '),
-    `  abstract ${m.name}${hostSignature(api, config, m)};`,
+/** A record: an interface of read-only fields (an `Option` one optional), a tuple struct a labelled tuple */
+const recordCode = (api: Api, config: Config, r: ApiRecord): string[] => {
+  const type = (f: ApiRecord['fields'][number]) =>
+    f.ts ?? tsTypeOf(api, f.optional ? f.rust.replace(/^Option<(.*)>$/, '$1') : f.rust, config.types);
+
+  if (r.tuple)
+    return [
+      tsDoc(r.doc),
+      `export type ${r.name} = [${r.fields.map((f) => `${f.name}${f.optional ? '?' : ''}: ${type(f)}`).join(', ')}];`,
+      '',
+    ];
+
+  return [
+    tsDoc(r.doc),
+    `export interface ${r.name} {`,
+    ...r.fields.flatMap((f) => [tsDoc(f.doc, '  '), `  readonly ${f.name}${f.optional ? '?' : ''}: ${type(f)};`]),
+    '}',
+    '',
+  ];
+};
+
+/** A host's events and their payloads (`undefined`: none) */
+const eventsCode = (api: Api, config: Config, e: HostEvents): string[] => [
+  tsDoc(e.doc || `The events of ${e.host} and their payloads`),
+  `export interface ${e.name} {`,
+  ...e.events.flatMap((ev) => [
+    tsDoc(ev.doc, '  '),
+    `  ${/^[a-z_$][\w$]*$/i.test(ev.name) ? ev.name : `'${ev.name}'`}: ${ev.ts ?? (ev.payload ? tsTypeOf(api, ev.payload, config.types) : 'undefined')};`,
   ]),
   '}',
   '',
 ];
+
+/** A host's `on` and `emit` over its events: a listener that throws is reported, the others still called */
+const listenersCode = (e: HostEvents): string[] => [
+  `  readonly #listeners = new Map<keyof ${e.name}, Set<(event: never) => void>>();`,
+  '',
+  '  /** Listens to an event; returns the function that stops listening */',
+  `  on<K extends keyof ${e.name}>(type: K, listener: (event: ${e.name}[K]) => void): () => void {`,
+  '    const listeners = this.#listeners.get(type) ?? new Set();',
+  '    const added = listener as (event: never) => void;',
+  '',
+  '    this.#listeners.set(type, listeners.add(added));',
+  '',
+  '    return () => {',
+  '      listeners.delete(added);',
+  '    };',
+  '  }',
+  '',
+  '  /** Calls the listeners of an event; one that throws is reported, and does not stop the others */',
+  `  protected emit<K extends keyof ${e.name}>(type: K, event: ${e.name}[K]): void {`,
+  '    for (const listener of [...(this.#listeners.get(type) ?? [])]) {',
+  '      try {',
+  `        (listener as (event: ${e.name}[K]) => void)(event);`,
+  '      } catch (error) {',
+  '        queueMicrotask(() => {',
+  '          throw error;',
+  '        });',
+  '      }',
+  '    }',
+  '  }',
+  '',
+];
+
+/** A host's base class: each method declared, the hand-written class (`class Preview extends PreviewApi`)
+ * implementing them; tsc fails where it does not follow the declarations. Its events' `on` and `emit` are written */
+const hostCode = (api: Api, config: Config, h: Host): string[] => {
+  const own = eventsOf(api, h.name);
+
+  return [
+    ...(own ? eventsCode(api, config, own) : []),
+    tsDoc(h.doc || `The methods declared for ${h.name}: the hand-written class implements them`),
+    `export abstract class ${h.name}Api {`,
+    ...(own ? listenersCode(own) : []),
+    ...h.methods.flatMap((m) => [
+      tsDoc(m.animation ? `${m.doc}\n\nResolved once the animation ends` : m.doc, '  '),
+      `  abstract ${m.name}${hostSignature(api, config, m)};`,
+    ]),
+    '}',
+    '',
+  ];
+};
 
 /** The facade's text */
 export const facade = (api: Api, config: Config, out: string): string => {
@@ -274,6 +348,7 @@ export const facade = (api: Api, config: Config, out: string): string => {
     ...options(api).flatMap((o) => optionsCode(api, config, o)),
     ...functions(api).flatMap((f) => functionCode(api, config, f)),
     ...classes(api).flatMap((c) => classCode(api, config, c)),
+    ...records(api).flatMap((r) => recordCode(api, config, r)),
     ...hosts(api).flatMap((h) => hostCode(api, config, h)),
   ]);
 };

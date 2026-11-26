@@ -9,9 +9,20 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { configOf } from '../src/config.ts';
 import { cached, extractorOf, platformDir, prebuilt } from '../src/extractor.ts';
-import { checkedApi, pyDoc, pyLiteral, pyTypeOf, tsTypeOf } from '../src/model.ts';
+import { checkedApi, kebab, pyDoc, pyLiteral, pyTypeOf, tsTypeOf } from '../src/model.ts';
 import { region } from '../src/output.ts';
-import { classes, converters, functions, hosts, options, settingCalls, settings, unions } from '../src/patterns.ts';
+import {
+  classes,
+  converters,
+  events,
+  functions,
+  hosts,
+  options,
+  records,
+  settingCalls,
+  settings,
+  unions,
+} from '../src/patterns.ts';
 import { BUILT_IN, targetsOf } from '../src/run.ts';
 import { fresh, inputsOf, stamp } from '../src/stamp.ts';
 import { VERSION } from '../src/version.ts';
@@ -123,8 +134,54 @@ test('a host: the methods of a hand-written class, its trailing Options optional
         ],
       ],
       ['pixels', false, false, []],
+      ['snapshot', false, false, []],
+      ['clear', false, false, []],
     ],
   );
+});
+
+test('records: read-only fields, an Option optional; a tuple struct labelled', () => {
+  assert.deepEqual(
+    records(api).map((r) => [r.name, r.tuple, r.fields.map((f) => [f.name, f.optional])]),
+    [
+      [
+        'Size',
+        true,
+        [
+          ['width', false],
+          ['height', false],
+        ],
+      ],
+      [
+        'Snapshot',
+        false,
+        [
+          ['size', false],
+          ['radius', false],
+          ['shownAt', true],
+        ],
+      ],
+    ],
+  );
+  assert.equal(tsTypeOf(api, 'Snapshot'), 'Snapshot');
+  assert.equal(pyTypeOf(api, 'Size'), 'Size');
+});
+
+test("events: a host's, each named by its variant in lowercase (or its name), its payload its one field", () => {
+  const [preview] = events(api);
+
+  assert.equal(preview?.host, 'Preview');
+  assert.equal(preview?.name, 'PreviewEvents');
+  assert.deepEqual(
+    preview?.events.map((e) => [e.name, e.payload]),
+    [
+      ['shown', 'Snapshot'],
+      ['radiuschange', 'f64'],
+      ['cleared', undefined],
+    ],
+  );
+  assert.equal(kebab('Preview'), 'preview');
+  assert.equal(kebab('min_zoom'), 'min-zoom');
 });
 
 test('settings: a setter, a getter where kept, the call applying it, the settings it takes together', () => {

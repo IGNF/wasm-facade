@@ -185,6 +185,40 @@ pub trait PreviewHost {
     fn fade_to(radius: f64, duration: Option<f64>);
     /// The pixels shown, RGBA
     fn pixels() -> Vec<u8>;
+    /// What it shows
+    fn snapshot() -> Snapshot;
+    /// Shows nothing
+    fn clear();
+}
+
+/// What the preview shows
+#[cfg(wasm_facade)]
+#[api(record)]
+pub struct Snapshot {
+    /// The image's size, pixels
+    pub size: Size,
+    /// The blur's radius, pixels
+    pub radius: f64,
+    /// When it was shown (`performance.now()`), if it was
+    pub shown_at: Option<f64>,
+}
+
+/// A width and a height, pixels
+#[cfg(wasm_facade)]
+#[api(record)]
+pub struct Size(#[api(label = "width")] u32, #[api(label = "height")] u32);
+
+/// What the preview tells its listeners
+#[cfg(wasm_facade)]
+#[api(events, host = "Preview")]
+pub enum PreviewEvent {
+    /// An image shown
+    Shown(Snapshot),
+    /// The radius at each step of an animation
+    #[api(name = "radiuschange")]
+    RadiusChange(f64),
+    /// The preview cleared
+    Cleared,
 }
 
 /// The histogram of an image's luminance: 256 counts

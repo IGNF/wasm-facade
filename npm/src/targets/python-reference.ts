@@ -4,7 +4,7 @@
  * defaults, the methods of each class and settings, the unions
  */
 import { type Api, camel, pyDoc, pyLiteral, pyTypeOf, type Signature, snake } from '../model.ts';
-import { classes, converters, functions, hosts, options, settings, unions } from '../patterns.ts';
+import { classes, converters, eventsOf, functions, hosts, options, records, settings, unions } from '../patterns.ts';
 import { type Context, type Output, option, type Target } from '../target.ts';
 
 type Types = Record<string, string>;
@@ -79,8 +79,17 @@ export const pythonReference: Target = {
 
           return `- \`${snake(m.name)}(${params.join(', ')})\` → \`${m.async || m.animation ? `Awaitable[${result}]` : result}\`: ${pyDoc(m.doc)}`;
         }),
+        ...(eventsOf(api, h.name)?.events ?? []).map(
+          (e) => `- \`on("${e.name}", listener)\`${e.doc ? `: ${pyDoc(e.doc)}` : ''}`,
+        ),
         '',
       ]),
+      ...(records(api).length ? ['## Records', ''] : []),
+      ...records(api).map(
+        (r) =>
+          `- \`${r.name}\`${r.tuple ? ' (a tuple)' : ''}: ${r.fields.map((f) => `\`${f.name.replace(/^_/, '')}\` (\`${f.py ?? pyTypeOf(api, f.rust, types)}\`)`).join(', ')}${r.doc ? `. ${pyDoc(r.doc)}` : ''}`,
+      ),
+      ...(records(api).length ? [''] : []),
       ...structs.flatMap((s) => [
         `## Settings: \`${s}\` (\`${s}Api\`)`,
         '',

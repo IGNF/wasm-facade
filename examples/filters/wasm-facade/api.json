@@ -200,6 +200,48 @@
     },
     {
       "api": {
+        "events": true,
+        "host": "Preview"
+      },
+      "doc": "What the preview tells its listeners",
+      "kind": "enum",
+      "name": "PreviewEvent",
+      "variants": [
+        {
+          "doc": "An image shown",
+          "fields": [
+            {
+              "api": {},
+              "doc": "",
+              "name": "0",
+              "type": "Snapshot"
+            }
+          ],
+          "name": "Shown"
+        },
+        {
+          "api": {
+            "name": "radiuschange"
+          },
+          "doc": "The radius at each step of an animation",
+          "fields": [
+            {
+              "api": {},
+              "doc": "",
+              "name": "0",
+              "type": "f64"
+            }
+          ],
+          "name": "RadiusChange"
+        },
+        {
+          "doc": "The preview cleared",
+          "name": "Cleared"
+        }
+      ]
+    },
+    {
+      "api": {
         "host": "Preview"
       },
       "doc": "A blur's preview: an image on a canvas, blurred as it is shown",
@@ -258,9 +300,83 @@
           "name": "pixels",
           "params": [],
           "returns": "Vec<u8>"
+        },
+        {
+          "api": {},
+          "async": false,
+          "doc": "What it shows",
+          "export": "snapshot",
+          "flags": [],
+          "name": "snapshot",
+          "params": [],
+          "returns": "Snapshot"
+        },
+        {
+          "api": {},
+          "async": false,
+          "doc": "Shows nothing",
+          "export": "clear",
+          "flags": [],
+          "name": "clear",
+          "params": [],
+          "returns": null
         }
       ],
       "name": "PreviewHost"
+    },
+    {
+      "api": {
+        "record": true
+      },
+      "doc": "A width and a height, pixels",
+      "fields": [
+        {
+          "api": {
+            "label": "width"
+          },
+          "doc": "",
+          "name": "0",
+          "type": "u32"
+        },
+        {
+          "api": {
+            "label": "height"
+          },
+          "doc": "",
+          "name": "1",
+          "type": "u32"
+        }
+      ],
+      "kind": "struct",
+      "name": "Size"
+    },
+    {
+      "api": {
+        "record": true
+      },
+      "doc": "What the preview shows",
+      "fields": [
+        {
+          "api": {},
+          "doc": "The image's size, pixels",
+          "name": "size",
+          "type": "Size"
+        },
+        {
+          "api": {},
+          "doc": "The blur's radius, pixels",
+          "name": "radius",
+          "type": "f64"
+        },
+        {
+          "api": {},
+          "doc": "When it was shown (`performance.now()`), if it was",
+          "name": "shown_at",
+          "type": "Option<f64>"
+        }
+      ],
+      "kind": "struct",
+      "name": "Snapshot"
     },
     {
       "api": {

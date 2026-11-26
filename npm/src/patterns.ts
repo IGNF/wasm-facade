@@ -19,6 +19,10 @@
  *   TypeScript is its Rust name in camelCase (or `export = "…"`); `animation` makes it return a promise resolved once
  *   the animation ends; a parameter or a result typed in TypeScript or Python only takes `ts = "…"`, `py = "…"`;
  *   trailing `Option` parameters may be left out
+ * - record: a struct with `api(record)`, a structured value a method returns (or takes): its fields read only, an
+ *   `Option` one optional, `ts`/`py` where a type is not Rust's; a tuple struct a tuple, labelled by `label`
+ * - events: an enum with `api(events, host = "<class>")`, each variant an event of that host: its name (the variant's
+ *   in lowercase, or `name = "…"`), its payload (the variant's one field, none else)
  * - converters: a function's or a method's `convert = "<param>=<converter>, …"` passes that parameter through the
  *   project's converter (its type the converter's parameter's), `result = "<converter>"` its result
  */
@@ -245,6 +249,89 @@ export const hosts = (api: Api): Host[] =>
       };
     }),
   }));
+
+export interface RecordField {
+  /** Its name in TypeScript (`minZoom`; a tuple's label, or its position) */
+  name: string;
+  rust: string;
+  ts: string | undefined;
+  py: string | undefined;
+  doc: string;
+  optional: boolean;
+}
+
+export interface ApiRecord {
+  name: string;
+  doc: string;
+  /** A tuple struct: a tuple in TypeScript and Python */
+  tuple: boolean;
+  fields: RecordField[];
+}
+
+/** The records declared: the structured values methods return */
+export const records = (api: Api): ApiRecord[] =>
+  by(api, 'struct', 'record').map((s) => {
+    const fields = s.fields ?? [];
+    const tuple = fields.length > 0 && fields.every((f) => /^\d+$/.test(f.name));
+
+    return {
+      name: s.name,
+      doc: s.doc,
+      tuple,
+      fields: fields.map((f) => ({
+        name: tuple ? (text(f.api.label) ?? `_${f.name}`) : camel(f.name),
+        rust: f.type,
+        ts: text(f.api.ts),
+        py: text(f.api.py),
+        doc: f.doc,
+        optional: /^Option<.*>$/.test(f.type),
+      })),
+    };
+  });
+
+export interface HostEvent {
+  /** Its name (`moveend`), the variant declaring it */
+  name: string;
+  variant: string;
+  doc: string;
+  /** Its payload's Rust type (none: `undefined`), as written for TypeScript or Python (`ts`, `py` on the variant) */
+  payload: string | undefined;
+  ts: string | undefined;
+  py: string | undefined;
+}
+
+export interface HostEvents {
+  /** The host whose events they are (`Preview`), their map (`PreviewEvents`), the enum declaring them */
+  host: string;
+  name: string;
+  enum: string;
+  doc: string;
+  events: HostEvent[];
+}
+
+/** The events declared, by host */
+export const events = (api: Api): HostEvents[] =>
+  by(api, 'enum', 'events').map((e) => {
+    const host = text(e.api.host) ?? e.name.replace(/Events?$/, '');
+
+    return {
+      host,
+      name: `${host}Events`,
+      enum: e.name,
+      doc: e.doc,
+      events: (e.variants ?? []).map((v) => ({
+        name: text(v.api?.name) ?? v.name.toLowerCase(),
+        variant: v.name,
+        doc: v.doc,
+        payload: v.fields?.[0]?.type,
+        ts: text(v.api?.ts),
+        py: text(v.api?.py),
+      })),
+    };
+  });
+
+/** A host's events, if it has some */
+export const eventsOf = (api: Api, host: string): HostEvents | undefined => events(api).find((e) => e.host === host);
 
 /** A function's or a method's converters: parameter → converter (`convert = "pixels=imageData, …"`) */
 export const converters = (sig: { api: Declared['api'] }): Record<string, string> =>

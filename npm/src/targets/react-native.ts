@@ -5,7 +5,7 @@
  * (a WebView, a native module) forwards those names, and only those, to the facade
  */
 import { camel, HEADER_OF, joined, snake } from '../model.ts';
-import { classes, functions, hosts, settings } from '../patterns.ts';
+import { classes, eventsOf, functions, hosts, settings } from '../patterns.ts';
 import { type Context, type Output, option, type Target } from '../target.ts';
 
 const constant = (name: string): string => snake(name).replace(/^_/, '').toUpperCase();
@@ -49,13 +49,18 @@ export const reactNative: Target = {
           c.events.map((e) => e.name),
         ),
       ]),
-      ...hosts(api).flatMap((h) =>
-        list(
+      ...hosts(api).flatMap((h) => [
+        ...list(
           `\`${h.name}\`'s methods, written by hand`,
           `${constant(h.name)}_METHODS`,
           h.methods.map((m) => m.name),
         ),
-      ),
+        ...list(
+          `\`${h.name}\`'s events`,
+          `${constant(h.name)}_EVENTS`,
+          eventsOf(api, h.name)?.events.map((e) => e.name) ?? [],
+        ),
+      ]),
       ...structs.flatMap((s) =>
         list(
           `\`${s}\`'s setters and getters`,
