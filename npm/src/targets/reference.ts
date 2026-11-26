@@ -4,7 +4,7 @@
  */
 import type { Config } from '../config.ts';
 import { type Api, camel, type Signature, tsTypeOf } from '../model.ts';
-import { type Class, classes, functions, type Options, options, unions } from '../patterns.ts';
+import { type Class, classes, functions, hosts, type Options, options, unions } from '../patterns.ts';
 import { type Context, type Output, option, type Target } from '../target.ts';
 
 const line = (doc: string): string => doc.split('\n').join(' ');
@@ -74,6 +74,18 @@ export const reference: Target = {
         ? ['## Functions', '', ...fns.map((f) => `- ${signature(api, config, f)}: ${line(f.doc)}`), '']
         : []),
       ...(list.length ? ['## Classes', '', ...list.flatMap((c) => classSection(api, config, c))] : []),
+      ...hosts(api).flatMap((h) => [
+        `## \`${h.name}\``,
+        '',
+        ...(h.doc ? [line(h.doc), ''] : []),
+        ...h.methods.map((m) => {
+          const params = m.params.map((p) => `${p.name}${p.optional ? '?' : ''}`).join(', ');
+          const result = m.ts ?? (m.returns ? tsTypeOf(api, m.returns, config.types) : 'void');
+
+          return `- \`${m.name}(${params})\` → \`${m.async || m.animation ? `Promise<${result}>` : result}\`: ${line(m.doc)}${m.animation ? ' (resolved once the animation ends)' : ''}`;
+        }),
+        '',
+      ]),
       ...(options(api).length
         ? [
             '## Options',

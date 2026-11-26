@@ -11,7 +11,7 @@ import { configOf } from '../src/config.ts';
 import { cached, extractorOf, platformDir, prebuilt } from '../src/extractor.ts';
 import { checkedApi, pyDoc, pyLiteral, pyTypeOf, tsTypeOf } from '../src/model.ts';
 import { region } from '../src/output.ts';
-import { classes, converters, functions, options, settingCalls, settings, unions } from '../src/patterns.ts';
+import { classes, converters, functions, hosts, options, settingCalls, settings, unions } from '../src/patterns.ts';
 import { BUILT_IN, targetsOf } from '../src/run.ts';
 import { fresh, inputsOf, stamp } from '../src/stamp.ts';
 import { VERSION } from '../src/version.ts';
@@ -94,6 +94,37 @@ describe('the generic patterns', () => {
       [['progress', 'number']],
     );
   });
+});
+
+test('a host: the methods of a hand-written class, its trailing Options optional, its animations', () => {
+  const [preview] = hosts(api);
+
+  assert.equal(preview?.name, 'Preview');
+  assert.equal(preview?.trait, 'PreviewHost');
+  assert.deepEqual(
+    preview?.methods.map((m) => [m.name, m.async, m.animation, m.params.map((p) => [p.name, p.optional, p.ts])]),
+    [
+      [
+        'show',
+        true,
+        false,
+        [
+          ['image', false, 'ImageData'],
+          ['options', true, undefined],
+        ],
+      ],
+      [
+        'fadeTo',
+        false,
+        true,
+        [
+          ['radius', false, undefined],
+          ['duration', true, undefined],
+        ],
+      ],
+      ['pixels', false, false, []],
+    ],
+  );
 });
 
 test('settings: a setter, a getter where kept, the call applying it, the settings it takes together', () => {

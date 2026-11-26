@@ -4,7 +4,7 @@ use crate::Config;
 use quote::ToTokens;
 use serde_json::{Map, Value, json};
 use syn::punctuated::Punctuated;
-use syn::{Attribute, Expr, ImplItem, Item, Lit, Meta, ReturnType, Signature, Token};
+use syn::{Attribute, Expr, ImplItem, Item, Lit, Meta, ReturnType, Signature, Token, TraitItem};
 
 /// The declared items of a file or an inline module: those carrying the attribute
 #[must_use]
@@ -29,8 +29,8 @@ pub fn items(config: &Config, items: &[Item]) -> Vec<Value> {
         .collect()
 }
 
-/// A struct, an enum, a function or an `impl` block: its name, documentation, attribute's keys, and its fields,
-/// variants, signature or methods
+/// A struct, an enum, a function, an `impl` block or a host trait: its name, documentation, attribute's keys, and its
+/// fields, variants, signature or methods
 fn declared(config: &Config, item: &Item) -> Option<Value> {
     match item {
         Item::Struct(s) => {
@@ -102,6 +102,32 @@ fn declared(config: &Config, item: &Item) -> Option<Value> {
                 "methods": methods,
             }))
         }
+        // A host: the methods of a class written by hand (in TypeScript), declared here for every binding. The trait
+        // is usually never compiled (`#[cfg(<cfg>)]`): its types need not exist in Rust, its attributes may be bare
+        Item::Trait(t) => {
+            let methods: Vec<Value> = t
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    TraitItem::Fn(method) => {
+                        let mut value = signature(config, &method.sig, &method.attrs);
+
+                        value["api"] = keys(config, &method.attrs);
+
+                        Some(value)
+                    }
+                    _ => None,
+                })
+                .collect();
+
+            Some(json!({
+                "kind": "host",
+                "name": t.ident.to_string(),
+                "doc": doc(&t.attrs),
+                "api": keys(config, &t.attrs),
+                "methods": methods,
+            }))
+        }
         _ => None,
     }
 }
@@ -113,14 +139,24 @@ fn signature(config: &Config, sig: &Signature, attrs: &[Attribute]) -> Value {
         .inputs
         .iter()
         .filter_map(|input| match input {
-            syn::FnArg::Typed(t) => Some(json!({
-                // The binding's name alone: `mut image` and `ref image` are `image` to the caller
-                "name": match &*t.pat {
-                    syn::Pat::Ident(binding) => binding.ident.to_string(),
-                    pat => pat.to_token_stream().to_string(),
-                },
-                "type": type_text(&t.ty),
-            })),
+            syn::FnArg::Typed(t) => {
+                let mut param = json!({
+                    // The binding's name alone: `mut image` and `ref image` are `image` to the caller
+                    "name": match &*t.pat {
+                        syn::Pat::Ident(binding) => binding.ident.to_string(),
+                        pat => pat.to_token_stream().to_string(),
+                    },
+                    "type": type_text(&t.ty),
+                });
+                let keys = keys(config, &t.attrs);
+
+                // A parameter's own keys (`#[api(ts = "…")] camera: Camera`), only where it has some
+                if keys.as_object().is_some_and(|k| !k.is_empty()) {
+                    param["api"] = keys;
+                }
+
+                Some(param)
+            }
             syn::FnArg::Receiver(_) => None,
         })
         .collect();
@@ -178,10 +214,19 @@ fn doc(attrs: &[Attribute]) -> String {
     lines.join("\n")
 }
 
-/// The keys of an item's `cfg_attr(<cfg>, <attribute>(…))`: a string, a number or a flag (true) each
+/// The keys of an item's `cfg_attr(<cfg>, <attribute>(…))`, or of a bare `#[<attribute>(…)]` (in code never compiled,
+/// a `#[cfg(<cfg>)]` trait): a string, a number or a flag (true) each
 fn keys(config: &Config, attrs: &[Attribute]) -> Value {
     let mut keys = Map::new();
 
+    for attr in attrs
+        .iter()
+        .filter(|a| a.path().is_ident(&config.attribute))
+    {
+        if let Ok(entries) = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated) {
+            entries.iter().for_each(|entry| insert(&mut keys, entry));
+        }
+    }
     for attr in attrs.iter().filter(|a| a.path().is_ident("cfg_attr")) {
         let Ok(parts) = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
         else {
@@ -208,29 +253,30 @@ fn keys(config: &Config, attrs: &[Attribute]) -> Value {
                 continue;
             };
 
-            for entry in entries {
-                let key = entry.path().to_token_stream().to_string();
-                let value = match &entry {
-                    Meta::NameValue(nv) => match &nv.value {
-                        Expr::Lit(lit) => match &lit.lit {
-                            Lit::Str(s) => json!(s.value()),
-                            Lit::Int(i) => {
-                                i.base10_parse::<i64>().map_or(Value::Null, |n| json!(n))
-                            }
-                            Lit::Bool(b) => json!(b.value),
-                            _ => Value::Null,
-                        },
-                        _ => Value::Null,
-                    },
-                    _ => json!(true),
-                };
-
-                keys.insert(key, value);
-            }
+            entries.iter().for_each(|entry| insert(&mut keys, entry));
         }
     }
 
     Value::Object(keys)
+}
+
+/// An attribute's entry as a key: its text, its number, its boolean, or true for a flag
+fn insert(keys: &mut Map<String, Value>, entry: &Meta) {
+    let key = entry.path().to_token_stream().to_string();
+    let value = match entry {
+        Meta::NameValue(nv) => match &nv.value {
+            Expr::Lit(lit) => match &lit.lit {
+                Lit::Str(s) => json!(s.value()),
+                Lit::Int(i) => i.base10_parse::<i64>().map_or(Value::Null, |n| json!(n)),
+                Lit::Bool(b) => json!(b.value),
+                _ => Value::Null,
+            },
+            _ => Value::Null,
+        },
+        _ => json!(true),
+    };
+
+    keys.insert(key, value);
 }
 
 /// The entries of an item's export attributes (`#[wasm_bindgen(…)]`)
@@ -385,6 +431,33 @@ mod tests {
         assert_eq!(class["methods"][2]["export"], "applyLater");
         assert_eq!(class["methods"][2]["async"], true);
         assert_eq!(class["methods"][2]["params"][0]["type"], "Vec<u8>");
+    }
+
+    #[test]
+    fn reads_a_host_trait_never_compiled_its_bare_attributes_and_its_parameters_keys() {
+        let file: syn::File = syn::parse_str(
+            r#"/// A preview
+            #[cfg(my_api)]
+            #[api(host = "Preview")]
+            pub trait PreviewHost {
+                /// Fades to a radius
+                #[api(animation)]
+                fn fade_to(&self, radius: f64, #[api(ts = "number")] duration: Option<f64>);
+                async fn show(image: Vec<u8>) -> Snapshot;
+            }"#,
+        )
+        .unwrap();
+        let host = &items(&config(), &file.items)[0];
+
+        assert_eq!(host["kind"], "host");
+        assert_eq!(host["name"], "PreviewHost");
+        assert_eq!(host["api"]["host"], "Preview");
+        assert_eq!(host["methods"][0]["doc"], "Fades to a radius");
+        assert_eq!(host["methods"][0]["api"]["animation"], true);
+        assert_eq!(host["methods"][0]["params"][0].get("api"), None);
+        assert_eq!(host["methods"][0]["params"][1]["api"]["ts"], "number");
+        assert_eq!(host["methods"][1]["async"], true);
+        assert_eq!(host["methods"][1]["returns"], "Snapshot");
     }
 
     #[test]

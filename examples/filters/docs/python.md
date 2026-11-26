@@ -20,6 +20,14 @@ Its options: `BlurOptions`, `blur_options(…)`.
 - `apply_where(image: bytes | Sequence[int], width: int, keep: Callable[..., Any])` → `None`: Blurs the rows a predicate keeps
 - `on("progress", listener)`: The share of the image blurred, 0 to 1
 
+## `Preview` (`PreviewApi`)
+
+A blur's preview: an image on a canvas, blurred as it is shown
+
+- `show(image: Any, options: BlurOptions | None = None)` → `Awaitable[None]`: Shows an image, blurred by the options given (the blur's defaults else)
+- `fade_to(radius: float, duration: float | None = None)` → `Awaitable[None]`: Moves the blur's radius to `radius` over `duration` milliseconds (300 by default)
+- `pixels()` → `bytes | Sequence[int]`: The pixels shown, RGBA
+
 ## Options
 
 ### `BlurOptions`

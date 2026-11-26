@@ -200,6 +200,70 @@
     },
     {
       "api": {
+        "host": "Preview"
+      },
+      "doc": "A blur's preview: an image on a canvas, blurred as it is shown",
+      "kind": "host",
+      "methods": [
+        {
+          "api": {},
+          "async": true,
+          "doc": "Shows an image, blurred by the options given (the blur's defaults else)",
+          "export": "show",
+          "flags": [],
+          "name": "show",
+          "params": [
+            {
+              "api": {
+                "py": "Any",
+                "ts": "ImageData"
+              },
+              "name": "image",
+              "type": "Image"
+            },
+            {
+              "name": "options",
+              "type": "Option<BlurOptions>"
+            }
+          ],
+          "returns": null
+        },
+        {
+          "api": {
+            "animation": true
+          },
+          "async": false,
+          "doc": "Moves the blur's radius to `radius` over `duration` milliseconds (300 by default)",
+          "export": "fade_to",
+          "flags": [],
+          "name": "fade_to",
+          "params": [
+            {
+              "name": "radius",
+              "type": "f64"
+            },
+            {
+              "name": "duration",
+              "type": "Option<f64>"
+            }
+          ],
+          "returns": null
+        },
+        {
+          "api": {},
+          "async": false,
+          "doc": "The pixels shown, RGBA",
+          "export": "pixels",
+          "flags": [],
+          "name": "pixels",
+          "params": [],
+          "returns": "Vec<u8>"
+        }
+      ],
+      "name": "PreviewHost"
+    },
+    {
+      "api": {
         "convert": "image=pixels",
         "function": true
       },

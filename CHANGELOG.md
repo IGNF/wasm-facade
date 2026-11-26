@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Hosts (#7): a trait with `api(host = "<class>")`, usually never compiled (`#[cfg(<cfg>)]`, its attributes bare),
+  declares the methods of a class written by hand in TypeScript. The extractor reads it (kind `host`, a parameter's
+  own keys; schema 1, a reader ignoring kinds it does not know); the `hosts` pattern gives its methods, their trailing
+  `Option`s optional, `animation` returning a promise, `ts`/`py` where a type is not Rust's. The facade writes
+  `abstract class <Host>Api` (tsc checks the hand-written class against it), Python a mixin, React Native its names,
+  the references their sections. The example's `Preview` is one.
+- A declared options struct is a type parameters may take: `<Options>Init` in TypeScript, its `TypedDict` in Python.
+
 ## [0.2.1] - 2026-11-26
 
 ### Changed

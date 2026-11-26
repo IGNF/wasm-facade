@@ -116,6 +116,7 @@ own patterns read theirs.
 | a method taking a listener | `event = "progress"`, `payload = "number"` | `on('progress', listener)`, returning what stops it |
 | a parameter given through a converter | `convert = "image=pixels, …"` | the parameter typed as the converter's parameter |
 | a result through a converter | `result = "toImage"` | typed as the converter's result |
+| `#[cfg(wasm_facade)] trait PreviewHost { … }` | `host = "Preview"`; on a method `animation`, `export`, `ts`, `py`; on a parameter `ts`, `py` | `abstract class PreviewApi`: the methods of a class written by hand (below) |
 | `struct ViewSettings { min_zoom: f64 }` | `settings`; on a field `call = "setZoomRange"`, `getter`, `store`, `spread`, `convert`, `default` | each field a setting of a host class (`setMinZoom`, `getMinZoom`): read by the `web-component`, `react-native` and `python` targets and by plugins |
 
 Names: `snake_case` becomes `camelCase`; exported names are wasm-bindgen's `js_name`. A class's documentation is its
@@ -149,7 +150,7 @@ from the same `api.json`:
 
 | Target | Writes (default `out`) | |
 | --- | --- | --- |
-| `typescript` | the facade (`src/api.ts`) | unions, options with defaults, functions, classes, events, converters |
+| `typescript` | the facade (`src/api.ts`) | unions, options with defaults, functions, classes, events, converters, hosts' abstract classes |
 | `react` | hooks over the facade (`src/hooks.ts`; `facade`) | `useBlur(options)`, `useBlurEvent(blur, type, listener)` |
 | `web-component` | a custom element's attributes (`src/element.api.ts`; `from`, the structs, default the settings) | `ATTRIBUTES` (`'max-pitch'` → `maxPitch`, a number, a flag or text), `attributeValue(name, text)` |
 | `react-native` | the names a bridge exposes (`src/native.api.ts`) | each class's methods, properties and events, the functions, the settings' setters and getters |
@@ -158,6 +159,43 @@ from the same `api.json`:
 | `python-reference` | the Python reference (`docs/python.md`; `title`, `types`) | |
 
 The targets reading settings take `call_key`, the key naming their call (`call` by default).
+
+### Hosts: classes written by hand, declared in Rust
+
+Some methods are written by hand in TypeScript, and stay so: what loads (`fetch`, workers), what animates
+(`requestAnimationFrame`), what waits for the GPU. Their surface (names, parameters, results, documentation) is still
+declared once, in Rust, in a trait that is never compiled: its types need not exist in Rust, its attributes are bare.
+
+```rust
+/// A blur's preview: an image on a canvas, blurred as it is shown
+#[cfg(wasm_facade)]
+#[api(host = "Preview")]
+pub trait PreviewHost {
+    /// Shows an image, blurred by the options given
+    async fn show(#[api(ts = "ImageData", py = "Any")] image: Image, options: Option<BlurOptions>);
+    /// Moves the blur's radius over `duration` milliseconds
+    #[api(animation)]
+    fn fade_to(radius: f64, duration: Option<f64>);
+}
+```
+
+The facade declares them in an abstract class, and the hand-written class extends it: tsc fails where it does not
+follow the declarations.
+
+```ts
+// api.ts, generated
+export abstract class PreviewApi {
+  abstract show(image: ImageData, options?: BlurOptionsInit): Promise<void>;
+  /** … Resolved once the animation ends */
+  abstract fadeTo(radius: number, duration?: number): Promise<void>;
+}
+
+// preview.ts, by hand
+export class Preview extends PreviewApi { … }
+```
+
+Every other binding takes them as it takes the rest: Python's `PreviewApi` mixin, React Native's `PREVIEW_METHODS`, the
+references. Trailing `Option` parameters may be left out; `animation` returns a promise resolved once it ends.
 
 ### Python: one API, its transport the project's
 
@@ -236,8 +274,9 @@ git.
 ## The example
 
 `examples/filters` is a repository of its own using wasm-facade: an image-filters crate (`filters/src/lib.rs`, every
-pattern above but the settings), its `wasm-facade.toml` (every built-in target), its converters, and what wasm-facade
-writes from them, committed so that `check` shows any drift:
+pattern above but the settings), its `wasm-facade.toml` (every built-in target), its converters, its hand-written
+`Preview` (`src/preview.ts`, extending the generated `PreviewApi`), and what wasm-facade writes from them, committed so
+that `check` shows any drift:
 
 - `src/api.ts` (the facade), `src/hooks.ts` (`useBlur`, `useBlurEvent`), `src/element.api.ts`, `src/native.api.ts`;
 - `python/filters/_api.py`, over a recording transport in `python/filters/__init__.py`, run and typed strictly

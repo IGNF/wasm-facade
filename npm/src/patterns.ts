@@ -14,6 +14,11 @@
  *   host keeps the value as given (`getter`), where it keeps it (`store`, its name by default), the settings the call
  *   takes together (`spread = "<group>"`: every setting of the group passed at once), the converter of the value
  *   (`convert`), its default (`default`, a TypeScript literal): the option re-applied when the host's options change
+ * - host: a trait with `api(host = "<class>")`, usually never compiled (`#[cfg(<cfg>)]`, its attributes then bare
+ *   `#[api(…)]`): the methods of a class written by hand, declared once for every binding. A method's name in
+ *   TypeScript is its Rust name in camelCase (or `export = "…"`); `animation` makes it return a promise resolved once
+ *   the animation ends; a parameter or a result typed in TypeScript or Python only takes `ts = "…"`, `py = "…"`;
+ *   trailing `Option` parameters may be left out
  * - converters: a function's or a method's `convert = "<param>=<converter>, …"` passes that parameter through the
  *   project's converter (its type the converter's parameter's), `result = "<converter>"` its result
  */
@@ -173,6 +178,73 @@ export const settingCalls = (all: Setting[]): { call: string; spread: string | u
 
   return groups;
 };
+
+export interface HostParam {
+  name: string;
+  rust: string;
+  /** Its type as written for TypeScript or Python, where the Rust type is not theirs (`ts`, `py`) */
+  ts: string | undefined;
+  py: string | undefined;
+  /** An `Option` among the last parameters: one the caller may leave out */
+  optional: boolean;
+}
+
+export interface HostMethod {
+  /** Its name in TypeScript (`flyTo`) and in Rust (`fly_to`) */
+  name: string;
+  rust: string;
+  doc: string;
+  params: HostParam[];
+  /** Its result's Rust type, and as written for TypeScript or Python (`ts`, `py` on the method) */
+  returns: string | null;
+  ts: string | undefined;
+  py: string | undefined;
+  async: boolean;
+  /** An animation: a promise resolved once it ends */
+  animation: boolean;
+}
+
+export interface Host {
+  /** The hand-written class (`GeoMap`), the trait declaring it (`GeoMapHost`) */
+  name: string;
+  trait: string;
+  doc: string;
+  methods: HostMethod[];
+}
+
+/** The hosts declared: each hand-written class and the methods declared for it */
+export const hosts = (api: Api): Host[] =>
+  by(api, 'host', 'host').map((h) => ({
+    name: text(h.api.host) ?? h.name.replace(/Host$/, ''),
+    trait: h.name,
+    doc: h.doc,
+    methods: (h.methods ?? []).map((m) => {
+      const params = m.params;
+      // The parameters the caller may leave out: the trailing `Option`s
+      const firstOptional = params.reduceRight(
+        (first, p, i) => (first === i + 1 && /^Option<.*>$/.test(p.type) ? i : first),
+        params.length,
+      );
+
+      return {
+        name: text(m.api.export) ?? camel(m.name),
+        rust: m.name,
+        doc: m.doc,
+        params: params.map((p, i) => ({
+          name: camel(p.name),
+          rust: p.type,
+          ts: text(p.api?.ts),
+          py: text(p.api?.py),
+          optional: i >= firstOptional,
+        })),
+        returns: m.returns,
+        ts: text(m.api.ts),
+        py: text(m.api.py),
+        async: m.async,
+        animation: m.api.animation === true,
+      };
+    }),
+  }));
 
 /** A function's or a method's converters: parameter → converter (`convert = "pixels=imageData, …"`) */
 export const converters = (sig: { api: Declared['api'] }): Record<string, string> =>

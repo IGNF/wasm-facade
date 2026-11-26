@@ -6,9 +6,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from ._api import BLUR_OPTIONS_DEFAULTS, BlurApi, BlurOptions, Edge, FunctionsApi, blur_options
+from ._api import BLUR_OPTIONS_DEFAULTS, BlurApi, BlurOptions, Edge, FunctionsApi, PreviewApi, blur_options
 
-__all__ = ["Blur", "BlurOptions", "Edge", "Filters", "blur_options"]
+__all__ = ["Blur", "BlurOptions", "Edge", "Filters", "Preview", "blur_options"]
 
 
 class Recorder:
@@ -43,3 +43,7 @@ class Blur(Recorder, BlurApi):
 
 class Filters(Recorder, FunctionsApi):
     """The module's functions"""
+
+
+class Preview(Recorder, PreviewApi):
+    """The preview, its methods those the Rust declares for the TypeScript class"""

@@ -1,10 +1,11 @@
 /**
  * The names a React Native bridge exposes (`[targets.react-native] out`, default `src/native.api.ts`): for each class,
- * the facade's methods, properties and events; the functions; each settings struct's setters and getters. A bridge
+ * the facade's methods, properties and events; each host's methods; the functions; each settings struct's setters and
+ * getters. A bridge
  * (a WebView, a native module) forwards those names, and only those, to the facade
  */
 import { camel, HEADER_OF, joined, snake } from '../model.ts';
-import { classes, functions, settings } from '../patterns.ts';
+import { classes, functions, hosts, settings } from '../patterns.ts';
 import { type Context, type Output, option, type Target } from '../target.ts';
 
 const constant = (name: string): string => snake(name).replace(/^_/, '').toUpperCase();
@@ -48,6 +49,13 @@ export const reactNative: Target = {
           c.events.map((e) => e.name),
         ),
       ]),
+      ...hosts(api).flatMap((h) =>
+        list(
+          `\`${h.name}\`'s methods, written by hand`,
+          `${constant(h.name)}_METHODS`,
+          h.methods.map((m) => m.name),
+        ),
+      ),
       ...structs.flatMap((s) =>
         list(
           `\`${s}\`'s setters and getters`,
