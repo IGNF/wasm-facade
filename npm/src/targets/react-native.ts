@@ -33,21 +33,14 @@ export const reactNative: Target = {
           )
         : []),
       ...classes(api).flatMap((c) => [
-        ...list(
-          `\`${c.name}\`'s methods`,
-          `${constant(c.name)}_METHODS`,
-          c.methods.map((m) => camel(m.export)),
-        ),
-        ...list(
-          `\`${c.name}\`'s properties`,
-          `${constant(c.name)}_PROPERTIES`,
-          c.properties.map((p) => p.name),
-        ),
-        ...list(
-          `\`${c.name}\`'s events`,
-          `${constant(c.name)}_EVENTS`,
-          c.events.map((e) => e.name),
-        ),
+        ...list(`\`${c.name}\`'s methods`, `${constant(c.name)}_METHODS`, [
+          ...c.keyed.flatMap((k) => [camel(k.method.export), k.getter]),
+          ...c.methods.map((m) => camel(m.export)),
+        ]),
+        ...list(`\`${c.name}\`'s properties`, `${constant(c.name)}_PROPERTIES`, [
+          ...new Set([...c.kept.map((k) => k.name), ...c.properties.map((p) => p.name)]),
+        ]),
+        ...list(`\`${c.name}\`'s events`, `${constant(c.name)}_EVENTS`, [...c.events.map((e) => e.name), ...c.emitted]),
       ]),
       ...hosts(api).flatMap((h) => [
         ...list(

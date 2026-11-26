@@ -13,6 +13,8 @@ import {
   type Options,
   options,
   records,
+  returned,
+  taken,
   unions,
 } from '../patterns.ts';
 import { type Context, type Output, option, type Target } from '../target.ts';
@@ -23,10 +25,21 @@ const cell = (doc: string): string => line(doc).replaceAll('|', '\\|');
 const signature = (
   api: Api,
   config: Config,
-  sig: { export?: string; name: string; params?: Signature['params']; returns?: string | null; async?: boolean },
+  sig: {
+    export?: string;
+    name: string;
+    api: Signature['api'];
+    params?: Signature['params'];
+    returns?: string | null;
+    async?: boolean;
+  },
 ): string => {
-  const params = (sig.params ?? []).map((p) => camel(p.name)).join(', ');
-  const returns = sig.returns ? tsTypeOf(api, sig.returns, config.types) : 'void';
+  // The parameters a record `takes` named once, as that record
+  const groups = taken(api, sig);
+  const params = [
+    ...new Set((sig.params ?? []).map((p) => groups.find((g) => g.fields.includes(p.name))?.name ?? camel(p.name))),
+  ].join(', ');
+  const returns = returned(api, sig) ?? (sig.returns ? tsTypeOf(api, sig.returns, config.types) : 'void');
 
   return `\`${camel(sig.export ?? sig.name)}(${params})\` → \`${sig.async ? `Promise<${returns}>` : returns}\``;
 };
@@ -48,22 +61,41 @@ const classSection = (api: Api, config: Config, c: Class): string[] => [
   ...(c.options
     ? [`\`new ${c.name}(options)\`, its options \`${c.options.name}\`:`, '', ...optionsTable(api, config, c.options)]
     : []),
-  ...(c.properties.length
+  ...(c.kept.length || c.properties.length
     ? [
         'Properties:',
         '',
-        ...c.properties.map((p) => `- \`${p.name}\`${p.setter ? '' : ' (read only)'}: ${line(p.getter.doc)}`),
+        ...c.kept.map(
+          (k) =>
+            `- \`${k.name}\`${k.setter ? '' : ' (read only)'}: ${line(k.doc)} (the option as kept${k.emits ? `; its setter emits \`${k.emits}\`` : ''})`,
+        ),
+        ...c.properties
+          .filter((p) => !c.kept.some((k) => k.name === p.name))
+          .map((p) => `- \`${p.name}\`${p.setter ? '' : ' (read only)'}: ${line(p.getter.doc)}`),
+        '',
+      ]
+    : []),
+  ...(c.keyed.length
+    ? [
+        'Properties by key:',
+        '',
+        ...c.keyed.map((k) => {
+          const [key, name, value] = k.method.params.map((p) => camel(p.name));
+
+          return `- \`${camel(k.method.export)}(${key}, ${name}, ${value})\`, \`${k.getter}(${key}, ${name})\`: ${line(k.method.doc)} (\`${k.struct}\`'s, kept by key${k.emits ? `; emits \`${k.emits}\`` : ''})`;
+        }),
         '',
       ]
     : []),
   ...(c.methods.length
     ? ['Methods:', '', ...c.methods.map((m) => `- ${signature(api, config, m)}: ${line(m.doc)}`), '']
     : []),
-  ...(c.events.length
+  ...(c.events.length || c.emitted.length
     ? [
         'Events (`on(type, listener)`, returning what stops it):',
         '',
         ...c.events.map((e) => `- \`${e.name}\` (\`${e.payload}\`): ${line(e.method.doc)}`),
+        ...c.emitted.map((e) => `- \`${e}\`: a property changed by its setter, once kept and applied`),
         '',
       ]
     : []),

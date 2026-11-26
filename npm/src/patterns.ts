@@ -6,9 +6,16 @@
  *   without default is optional
  * - function: an exported `pub fn` with `api(function)`
  * - class: an exported `impl` block with `api(class)` (and `options = "<struct>"`: its constructor's parameters taken
- *   from those options by name): its constructor, getters and setters (wasm-bindgen's flags), methods (async ones
- *   returning a promise), events (a method with `event = "<name>"` and `payload = "<TypeScript type>"`, taking the
- *   listener), callbacks (a `js_sys::Function` parameter typed by `callback = "<TypeScript type>"`)
+ *   from those options by name, the options kept by the facade, each a property read from that copy): its
+ *   constructor, getters and setters (wasm-bindgen's flags), methods (async ones returning a promise), events (a
+ *   method with `event = "<name>"` and `payload = "<TypeScript type>"`, taking the listener), callbacks (a
+ *   `js_sys::Function` parameter typed by `callback = "<TypeScript type>"`), properties by key (a method
+ *   `(key, name, value)` with `keyed = "<struct>"`: each key's properties held by the facade)
+ * - emits: `emits = "<event>"` on an options struct or a field (or a keyed method, a settings struct or field), the
+ *   event its setter emits once the value is kept and the call made: `{ <field>: value }` (`{ key, name, value }`)
+ * - takes: `takes = "<record>, …"` on a function or a method, the parameters named as a record's fields taken as one
+ *   object of that record (a record of typed arrays: its buffers listed, to transfer)
+ * - returns: `returns = "<record>"` on a function or a method returning a `JsValue`: that record, checked
  * - settings: a struct with `api(settings)`, each field a setting of a host class: a setter storing the value and
  *   making the exported call that applies it (`call = "<method>"`, the key named by `callKey`), a getter where the
  *   host keeps the value as given (`getter`), where it keeps it (`store`, its name by default), the settings the call
@@ -26,7 +33,18 @@
  * - converters: a function's or a method's `convert = "<param>=<converter>, …"` passes that parameter through the
  *   project's converter (its type the converter's parameter's), `result = "<converter>"` its result
  */
-import { type Api, type Call, camel, type Declared, type Field, type Signature, text, upperFirst } from './model.ts';
+import {
+  type Api,
+  type Call,
+  camel,
+  type Declared,
+  type Field,
+  lowerFirst,
+  type Signature,
+  structOf,
+  text,
+  upperFirst,
+} from './model.ts';
 
 export interface Union {
   name: string;
@@ -54,6 +72,32 @@ export interface Event {
   payload: string;
 }
 
+/** An option of a class kept by its facade: read from the copy kept, never from the wasm module */
+export interface KeptProperty {
+  /** Its name in TypeScript, its Rust type, its documentation */
+  name: string;
+  rust: string;
+  doc: string;
+  /** The wasm-bindgen setter changing it, if any (read only else) */
+  setter: Signature | undefined;
+  /** The event its setter emits, `{ <name>: value }` (`emits` on the field or its struct), if any */
+  emits: string | undefined;
+}
+
+/** Properties by key held by the facade (`setPaintProperty(key, name, value)`, `getPaintProperty(key, name)`) */
+export interface Keyed {
+  /** The struct of the properties each key holds, and whether it gives defaults (`options`) */
+  struct: string;
+  defaults: boolean;
+  /** The exported method taking `(key, name, value)`, its getter's name (`getPaintProperty`) */
+  method: Signature;
+  getter: string;
+  /** The key's Rust type */
+  key: string;
+  /** The event its setter emits, `{ key, name, value }` (`emits` on the method or the struct), if any */
+  emits: string | undefined;
+}
+
 export interface Class {
   name: string;
   doc: string;
@@ -61,8 +105,14 @@ export interface Class {
   ctor: Signature | undefined;
   /** Properties: a getter, and its setter where there is one */
   properties: { name: string; getter: Signature; setter: Signature | undefined }[];
+  /** Its options kept by the facade, each a property read from the copy (those of `options`) */
+  kept: KeptProperty[];
+  /** Its properties by key (methods with `keyed = "<struct>"`) */
+  keyed: Keyed[];
   methods: Signature[];
   events: Event[];
+  /** The events its setters emit, by name: their payloads' types are the facade's to write */
+  emitted: string[];
 }
 
 const by = (api: Api, kind: Declared['kind'], key: string): Declared[] =>
@@ -96,17 +146,67 @@ export const functions = (api: Api): Declared[] => by(api, 'function', 'function
 /** A property's name: its getter's, or its setter's without `set_` */
 const propertyName = (sig: Signature): string => camel(sig.name.replace(/^set_/, ''));
 
+/** The struct a key names, of the kinds given */
+const structNamed = (api: Api, name: string, kinds: string[], by: string): Declared => {
+  const found = api.items.find((item) => item.kind === 'struct' && item.name === name);
+
+  if (!found || !kinds.some((kind) => found.api[kind]))
+    throw new Error(`wasm-facade: ${by} names ${name}: no struct declared ${kinds.join(' or ')}`);
+
+  return found;
+};
+
+/** A method's properties by key: `(key, name, value)`, the struct `keyed` names holding each key's */
+const keyedOf = (api: Api, c: Declared, m: Signature): Keyed => {
+  const name = text(m.api.keyed) ?? '';
+  const struct = structNamed(api, name, ['options', 'record'], `${c.name}.${m.name}'s keyed`);
+  const [key, property, value] = m.params;
+
+  if (!key || !property || !value || m.params.length !== 3)
+    throw new Error(`wasm-facade: ${c.name}.${m.name} (keyed): its parameters are (key, name, value)`);
+
+  return {
+    struct: name,
+    defaults: struct.api.options === true,
+    method: m,
+    getter: camel(m.export).replace(/^set(?=[A-Z])/, 'get'),
+    key: key.type,
+    emits: text(m.api.emits) ?? text(struct.api.emits),
+  };
+};
+
 export const classes = (api: Api): Class[] =>
   by(api, 'class', 'class').map((c) => {
     const methods = c.methods ?? [];
     const has = (sig: Signature, flag: string) => sig.flags.includes(flag);
     const setters = methods.filter((m) => has(m, 'setter'));
     const optionsName = text(c.api.options);
+    const own = optionsName ? options(api).find((o) => o.name === optionsName) : undefined;
+    const struct = own ? structOf(api, own.name) : undefined;
+    const kept: KeptProperty[] = (struct?.fields ?? []).map((f) => ({
+      name: camel(f.name),
+      rust: f.type,
+      doc: f.doc,
+      setter: setters.find((s) => propertyName(s) === camel(f.name)),
+      emits: text(f.api.emits) ?? text(struct?.api.emits),
+    }));
+    const keyed = methods.filter((m) => text(m.api.keyed)).map((m) => keyedOf(api, c, m));
+    const relayed = methods.map((m) => text(m.api.event)).filter((e) => e !== undefined);
+    const emitted = [
+      ...new Set(
+        [...kept.filter((k) => k.setter).map((k) => k.emits), ...keyed.map((k) => k.emits)].filter(
+          (e): e is string => e !== undefined,
+        ),
+      ),
+    ];
+    const both = emitted.filter((e) => relayed.includes(e));
+
+    if (both.length) throw new Error(`wasm-facade: ${c.name}: ${both.join(', ')} both emitted and a wasm event`);
 
     return {
       name: c.name,
       doc: c.doc,
-      options: optionsName ? options(api).find((o) => o.name === optionsName) : undefined,
+      options: own,
       ctor: methods.find((m) => has(m, 'constructor')),
       properties: methods
         .filter((m) => has(m, 'getter'))
@@ -115,12 +215,43 @@ export const classes = (api: Api): Class[] =>
           getter,
           setter: setters.find((s) => propertyName(s) === propertyName(getter)),
         })),
-      methods: methods.filter((m) => !has(m, 'constructor') && !has(m, 'getter') && !has(m, 'setter') && !m.api.event),
+      kept,
+      keyed,
+      methods: methods.filter(
+        (m) => !has(m, 'constructor') && !has(m, 'getter') && !has(m, 'setter') && !m.api.event && !m.api.keyed,
+      ),
       events: methods
         .filter((m) => text(m.api.event))
         .map((m) => ({ name: text(m.api.event) ?? '', method: m, payload: text(m.api.payload) ?? 'unknown' })),
+      emitted,
     };
   });
+
+/** The records a function or a method takes in place of its parameters (`takes = "<record>, …"`): each record's
+ * fields the parameters of their names, given as one object */
+export const taken = (api: Api, sig: { name: string; api: Declared['api']; params?: { name: string }[] }) =>
+  (text(sig.api.takes) ?? '')
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name !== '')
+    .map((name) => {
+      const struct = structNamed(api, name, ['record'], `${sig.name}'s takes`);
+      const fields = (struct.fields ?? []).map((f) => f.name);
+      const missing = fields.filter((f) => !(sig.params ?? []).some((p) => p.name === f));
+
+      if (missing.length) throw new Error(`wasm-facade: ${sig.name} takes ${name}: no parameter ${missing.join(', ')}`);
+
+      return { record: name, name: lowerFirst(name), fields };
+    });
+
+/** The record a function or a method returns, checked (`returns = "<record>"`: a `JsValue` built as one) */
+export const returned = (api: Api, sig: { name: string; api: Declared['api'] }): string | undefined => {
+  const name = text(sig.api.returns);
+
+  if (name) structNamed(api, name, ['record'], `${sig.name}'s returns`);
+
+  return name;
+};
 
 export interface Setting {
   /** The struct declaring it, and its field */
@@ -140,6 +271,8 @@ export interface Setting {
   /** The converter of the value, its default */
   convert: string | undefined;
   default: string | undefined;
+  /** The event its setter emits once the call is made, `{ <name>: value }` (`emits` on the field or its struct) */
+  emits: string | undefined;
 }
 
 /** The settings declared (`api(settings)` structs), each field's call named by `callKey` (default `call`) */
@@ -165,6 +298,7 @@ export const settings = (api: Api, { callKey = 'call' }: { callKey?: string } = 
         spread: text(field.api.spread),
         convert: text(field.api.convert),
         default: text(field.api.default),
+        emits: text(field.api.emits) ?? text(s.api.emits),
       };
     }),
   );

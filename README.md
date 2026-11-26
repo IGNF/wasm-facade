@@ -108,18 +108,22 @@ own patterns read theirs.
 | --- | --- | --- |
 | `#[wasm_bindgen] enum Edge { Clamp, Wrap }` | `union` (`rename_all = "none"` keeps the names) | `type Edge = 'clamp' \| 'wrap'`, mapped to the wasm enum |
 | `struct BlurOptions { radius: f64 }` | `options`; on a field `default = "2"` (a TypeScript literal) | `interface BlurOptions`, `BlurOptionsInit`, `defaultBlurOptions` |
+| an options struct or one of its fields | `emits = "change"` | the class's setter of that option emits `change` once the value is kept and the call made: `{ radius: 3 }`, typed in `BlurEvents`, heard by `on` |
 | `#[wasm_bindgen] pub fn histogram(…)` | `function` | `histogram(…)` |
-| `#[wasm_bindgen] impl Blur { … }` | `class`, `options = "BlurOptions"` | `class Blur`: `new Blur({ radius })` (the constructor's parameters taken from the options by name), its methods, `free()` |
+| `#[wasm_bindgen] impl Blur { … }` | `class`, `options = "BlurOptions"` | `class Blur`: `new Blur({ radius })` (the constructor's parameters taken from the options by name), its methods, `free()`; the options kept by the facade, each a property read from that copy (never from wasm; objects and arrays frozen, typed arrays copied), its wasm-bindgen setter keeping the value then making the call |
 | `#[wasm_bindgen(getter)]` / `(setter)` | (wasm-bindgen's) | `get radius()` / `set radius(v)` |
 | `pub async fn` | | returns `Promise<…>` |
 | a `js_sys::Function` parameter | `callback = "(row: number) => boolean"` | that parameter typed so |
 | a method taking a listener | `event = "progress"`, `payload = "number"` | `on('progress', listener)`, returning what stops it |
+| a method `(key, name, value)` | `keyed = "Levels"` (an `options` struct, its defaults; or a `record`), `emits` | `setLevelsProperty(key, name, value)`, returning the class, and `getLevelsProperty(key, name)`: each key's properties held by the facade (the value kept, then the call made), typed by the struct's fields; `emits` gives `{ key, name, value }` |
+| a function or a method of many parameters | `takes = "Planes, …"` (`record`s) | the parameters named as the record's fields taken as one object of it, `interleave(planes)`; a record of typed arrays also gets `planesBuffers(planes)`, its buffers once each, to transfer it |
+| a function or a method returning a `JsValue` | `returns = "Stats"` (a `record`) | typed as the record and checked as it comes back: `checkedStats(value)`, a `TypeError` naming the field that is not as declared (`Stats.mean is string, number expected`) |
 | a parameter given through a converter | `convert = "image=pixels, …"` | the parameter typed as the converter's parameter |
 | a result through a converter | `result = "toImage"` | typed as the converter's result |
 | `#[cfg(wasm_facade)] trait PreviewHost { … }` | `host = "Preview"`; on a method `animation`, `export`, `ts`, `py`; on a parameter `ts`, `py` | `abstract class PreviewApi`: the methods of a class written by hand (below) |
 | `struct Snapshot { radius: f64 }`, `struct Size(u32, u32)` | `record`; on a field `ts`, `py`, a tuple's `label` | `interface Snapshot { readonly radius: number }`, `type Size = [width: number, height: number]`; a `TypedDict`, a `tuple` in Python |
 | `enum PreviewEvent { Shown(Snapshot), Cleared }` | `events`, `host = "Preview"`; on a variant `name`, `ts`, `py` | `interface PreviewEvents { shown: Snapshot; cleared: undefined }`, the host's `on` and `emit` |
-| `struct ViewSettings { min_zoom: f64 }` | `settings`; on a field `call = "setZoomRange"`, `getter`, `store`, `spread`, `convert`, `default` | each field a setting of a host class (`setMinZoom`, `getMinZoom`): read by the `web-component`, `react-native` and `python` targets and by plugins |
+| `struct ViewSettings { min_zoom: f64 }` | `settings`; on a field `call = "setZoomRange"`, `getter`, `store`, `spread`, `convert`, `default`, `emits` (or on the struct) | each field a setting of a host class (`setMinZoom`, `getMinZoom`): read by the `web-component`, `react-native` and `python` targets and by plugins |
 
 Names: `snake_case` becomes `camelCase`; exported names are wasm-bindgen's `js_name`. A class's documentation is its
 `impl` block's doc comment; every doc comment becomes TSDoc and reference text. Types: numbers, `bool`, `String`,

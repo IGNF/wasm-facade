@@ -61,6 +61,35 @@
           "returns": null
         },
         {
+          "api": {},
+          "async": false,
+          "doc": "How it reads past the edges",
+          "export": "edge",
+          "flags": [
+            "getter"
+          ],
+          "name": "edge",
+          "params": [],
+          "returns": "Edge"
+        },
+        {
+          "api": {},
+          "async": false,
+          "doc": "Changes how it reads past the edges",
+          "export": "set_edge",
+          "flags": [
+            "setter"
+          ],
+          "name": "set_edge",
+          "params": [
+            {
+              "name": "edge",
+              "type": "Edge"
+            }
+          ],
+          "returns": null
+        },
+        {
           "api": {
             "convert": "image=pixels"
           },
@@ -156,9 +185,10 @@
     },
     {
       "api": {
+        "emits": "change",
         "options": true
       },
-      "doc": "A blur's options",
+      "doc": "A blur's options: kept by the facade, each a property of the blur, its setter emitting `change`",
       "fields": [
         {
           "api": {
@@ -184,6 +214,32 @@
       "api": {
         "union": true
       },
+      "doc": "A channel of an RGBA image",
+      "kind": "enum",
+      "name": "Channel",
+      "variants": [
+        {
+          "doc": "Red",
+          "name": "Red"
+        },
+        {
+          "doc": "Green",
+          "name": "Green"
+        },
+        {
+          "doc": "Blue",
+          "name": "Blue"
+        },
+        {
+          "doc": "Opacity",
+          "name": "Alpha"
+        }
+      ]
+    },
+    {
+      "api": {
+        "union": true
+      },
       "doc": "How a filter reads past the image's edges",
       "kind": "enum",
       "name": "Edge",
@@ -197,6 +253,139 @@
           "name": "Wrap"
         }
       ]
+    },
+    {
+      "api": {
+        "class": true
+      },
+      "doc": "A grade: levels per channel, applied to RGBA pixels in place",
+      "kind": "class",
+      "methods": [
+        {
+          "api": {},
+          "async": false,
+          "doc": "A grade leaving every channel as it is",
+          "export": "new",
+          "flags": [
+            "constructor"
+          ],
+          "name": "new",
+          "params": [],
+          "returns": "Grade"
+        },
+        {
+          "api": {
+            "keyed": "Levels"
+          },
+          "async": false,
+          "doc": "Sets one of a channel's levels",
+          "export": "setLevelsProperty",
+          "flags": [],
+          "name": "set_levels_property",
+          "params": [
+            {
+              "name": "channel",
+              "type": "Channel"
+            },
+            {
+              "name": "name",
+              "type": "&str"
+            },
+            {
+              "name": "value",
+              "type": "f64"
+            }
+          ],
+          "returns": "Result<(), String>"
+        },
+        {
+          "api": {
+            "convert": "image=pixels"
+          },
+          "async": false,
+          "doc": "Grades an image in place",
+          "export": "apply",
+          "flags": [],
+          "name": "apply",
+          "params": [
+            {
+              "name": "image",
+              "type": "&mut[u8]"
+            }
+          ],
+          "returns": null
+        }
+      ],
+      "name": "Grade"
+    },
+    {
+      "api": {
+        "emits": "change",
+        "options": true
+      },
+      "doc": "A channel's levels: its input range stretched to the whole, then its gamma; the facade keeps them by channel and\nits setter emits `change`",
+      "fields": [
+        {
+          "api": {
+            "default": "0"
+          },
+          "doc": "The input's black point, 0 to 255",
+          "name": "black",
+          "type": "f64"
+        },
+        {
+          "api": {
+            "default": "255"
+          },
+          "doc": "The input's white point, 0 to 255",
+          "name": "white",
+          "type": "f64"
+        },
+        {
+          "api": {
+            "default": "1"
+          },
+          "doc": "The gamma applied once stretched (1 leaves the midtones)",
+          "name": "gamma",
+          "type": "f64"
+        }
+      ],
+      "kind": "struct",
+      "name": "Levels"
+    },
+    {
+      "api": {
+        "record": true
+      },
+      "doc": "An image's planes, one byte per pixel each: what `interleave` takes as one object",
+      "fields": [
+        {
+          "api": {},
+          "doc": "The red bytes",
+          "name": "red",
+          "type": "Vec<u8>"
+        },
+        {
+          "api": {},
+          "doc": "The green bytes",
+          "name": "green",
+          "type": "Vec<u8>"
+        },
+        {
+          "api": {},
+          "doc": "The blue bytes",
+          "name": "blue",
+          "type": "Vec<u8>"
+        },
+        {
+          "api": {},
+          "doc": "The opacity's bytes",
+          "name": "alpha",
+          "type": "Vec<u8>"
+        }
+      ],
+      "kind": "struct",
+      "name": "Planes"
     },
     {
       "api": {
@@ -380,6 +569,34 @@
     },
     {
       "api": {
+        "record": true
+      },
+      "doc": "An image's luminance at a glance",
+      "fields": [
+        {
+          "api": {},
+          "doc": "Its pixels",
+          "name": "pixels",
+          "type": "u32"
+        },
+        {
+          "api": {},
+          "doc": "Its mean, 0 to 255",
+          "name": "mean",
+          "type": "f64"
+        },
+        {
+          "api": {},
+          "doc": "Its darkest and its lightest, if it has pixels",
+          "name": "range",
+          "type": "Option<Size>"
+        }
+      ],
+      "kind": "struct",
+      "name": "Stats"
+    },
+    {
+      "api": {
         "convert": "image=pixels",
         "function": true
       },
@@ -396,6 +613,57 @@
         }
       ],
       "returns": "Vec<u32>"
+    },
+    {
+      "api": {
+        "function": true,
+        "takes": "Planes"
+      },
+      "async": false,
+      "doc": "Planes interleaved as RGBA pixels, as long as the shortest",
+      "export": "interleave",
+      "flags": [],
+      "kind": "function",
+      "name": "interleave",
+      "params": [
+        {
+          "name": "red",
+          "type": "&[u8]"
+        },
+        {
+          "name": "green",
+          "type": "&[u8]"
+        },
+        {
+          "name": "blue",
+          "type": "&[u8]"
+        },
+        {
+          "name": "alpha",
+          "type": "&[u8]"
+        }
+      ],
+      "returns": "Vec<u8>"
+    },
+    {
+      "api": {
+        "convert": "image=pixels",
+        "function": true,
+        "returns": "Stats"
+      },
+      "async": false,
+      "doc": "An image's luminance at a glance: a JS object the facade checks as a `Stats`",
+      "export": "stats",
+      "flags": [],
+      "kind": "function",
+      "name": "stats",
+      "params": [
+        {
+          "name": "image",
+          "type": "&[u8]"
+        }
+      ],
+      "returns": "JsValue"
     }
   ],
   "schema": 1

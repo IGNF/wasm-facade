@@ -1,6 +1,6 @@
 """The generated Python API over the example's recording transport: names, defaults, options left out"""
 
-from filters import Blur, Filters, Preview, blur_options
+from filters import Blur, Filters, Grade, Planes, Preview, blur_options
 
 
 def test() -> None:
@@ -20,9 +20,21 @@ def test() -> None:
     preview.on("shown", print)
     assert preview.calls == [("show", (b"", {"radius": 2})), ("fadeTo", (4, None)), ("on", ("shown",))]
 
+    blur.edge = "wrap"
+    assert blur.edge == "wrap"
+    blur.on("change", print)
+
+    grade = Grade()
+    grade.set_levels_property("red", "gamma", 2)
+    grade.get_levels_property("red", "gamma")
+    assert grade.calls == [("setLevelsProperty", ("red", "gamma", 2)), ("getLevelsProperty", ("red", "gamma"))]
+
     filters = Filters()
+    planes: Planes = {"red": b"\1", "green": b"\2", "blue": b"\3", "alpha": b"\4"}
     filters.histogram(b"")
-    assert filters.calls == [("histogram", (b"",))]
+    filters.interleave(planes)
+    filters.stats(b"")
+    assert filters.calls == [("histogram", (b"",)), ("interleave", (planes,)), ("stats", (b"",))]
 
 
 test()

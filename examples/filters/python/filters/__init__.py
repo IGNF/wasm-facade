@@ -6,9 +6,19 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from ._api import BLUR_OPTIONS_DEFAULTS, BlurApi, BlurOptions, Edge, FunctionsApi, PreviewApi, blur_options
+from ._api import (
+    BLUR_OPTIONS_DEFAULTS,
+    BlurApi,
+    BlurOptions,
+    Edge,
+    FunctionsApi,
+    GradeApi,
+    Planes,
+    PreviewApi,
+    blur_options,
+)
 
-__all__ = ["Blur", "BlurOptions", "Edge", "Filters", "Preview", "blur_options"]
+__all__ = ["Blur", "BlurOptions", "Edge", "Filters", "Grade", "Planes", "Preview", "blur_options"]
 
 
 class Recorder:
@@ -39,6 +49,10 @@ class Blur(Recorder, BlurApi):
         super().__init__()
         self.options: BlurOptions = {**BLUR_OPTIONS_DEFAULTS, **(options or {})}
         self.values["radius"] = self.options.get("radius")
+
+
+class Grade(Recorder, GradeApi):
+    """A grade, its levels by channel"""
 
 
 class Filters(Recorder, FunctionsApi):

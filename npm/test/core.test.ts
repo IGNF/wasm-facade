@@ -7,6 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
+import type { Config } from '../src/config.ts';
 import { configOf } from '../src/config.ts';
 import { cached, extractorOf, platformDir, prebuilt } from '../src/extractor.ts';
 import { checkedApi, kebab, pyDoc, pyLiteral, pyTypeOf, tsTypeOf } from '../src/model.ts';
@@ -19,12 +20,15 @@ import {
   hosts,
   options,
   records,
+  returned,
   settingCalls,
   settings,
+  taken,
   unions,
 } from '../src/patterns.ts';
 import { BUILT_IN, targetsOf } from '../src/run.ts';
 import { fresh, inputsOf, stamp } from '../src/stamp.ts';
+import { facade } from '../src/targets/typescript.ts';
 import { VERSION } from '../src/version.ts';
 import { relevant } from '../src/watch.ts';
 
@@ -64,7 +68,10 @@ describe('the generic patterns', () => {
   test('a union, options with their defaults, a function and its converter', () => {
     assert.deepEqual(
       unions(api).map((u) => u.values.map((v) => v.value)),
-      [['clamp', 'wrap']],
+      [
+        ['red', 'green', 'blue', 'alpha'],
+        ['clamp', 'wrap'],
+      ],
     );
     assert.deepEqual(
       options(api)[0]?.fields.map((f) => [f.name, f.default]),
@@ -75,7 +82,7 @@ describe('the generic patterns', () => {
     );
     assert.deepEqual(
       functions(api).map((f) => f.name),
-      ['histogram'],
+      ['histogram', 'interleave', 'stats'],
     );
     assert.deepEqual(converters(functions(api)[0] ?? { api: {} }), { image: 'pixels' });
   });
@@ -90,8 +97,19 @@ describe('the generic patterns', () => {
     );
     assert.deepEqual(
       blur?.properties.map((p) => [p.name, p.setter !== undefined]),
-      [['radius', true]],
+      [
+        ['radius', true],
+        ['edge', true],
+      ],
     );
+    assert.deepEqual(
+      blur?.kept.map((k) => [k.name, k.emits]),
+      [
+        ['radius', 'change'],
+        ['edge', 'change'],
+      ],
+    );
+    assert.deepEqual(blur?.emitted, ['change']);
     assert.deepEqual(
       blur?.methods.map((m) => [m.export, m.async]),
       [
@@ -144,6 +162,7 @@ test('records: read-only fields, an Option optional; a tuple struct labelled', (
   assert.deepEqual(
     records(api).map((r) => [r.name, r.tuple, r.fields.map((f) => [f.name, f.optional])]),
     [
+      ['Planes', false, ['red', 'green', 'blue', 'alpha'].map((name) => [name, false])],
       [
         'Size',
         true,
@@ -159,6 +178,15 @@ test('records: read-only fields, an Option optional; a tuple struct labelled', (
           ['size', false],
           ['radius', false],
           ['shownAt', true],
+        ],
+      ],
+      [
+        'Stats',
+        false,
+        [
+          ['pixels', false],
+          ['mean', false],
+          ['range', true],
         ],
       ],
     ],
@@ -224,6 +252,226 @@ test('settings: a setter, a getter where kept, the call applying it, the setting
     () => settings(host, { callKey: 'engine' }),
     (e: Error) => e.message.includes('names no call'),
   );
+});
+
+/** A class whose facade keeps its options (a plain object, a typed array among them), emits from a field's setter,
+ * holds properties by key, takes a record of buffers and returns a record checked: its API and a wasm module faked */
+const field = (name: string, type: string, keys: Record<string, string | boolean> = {}) => ({
+  name,
+  type,
+  doc: '',
+  api: keys,
+});
+const method = (
+  name: string,
+  params: [string, string][],
+  keys = {},
+  flags: string[] = [],
+  returns: string | null = null,
+) => ({
+  name,
+  export: camelOf(name),
+  doc: '',
+  params: params.map(([n, type]) => ({ name: n, type })),
+  returns,
+  async: false,
+  flags,
+  api: keys,
+});
+const camelOf = (name: string) => name.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+const drawn = checkedApi({
+  schema: 1,
+  calls: {},
+  items: [
+    {
+      kind: 'struct',
+      name: 'LineStyle',
+      doc: '',
+      api: { options: true },
+      fields: [
+        field('color', 'String', { default: "'#000'", emits: 'restyle' }),
+        field('anchor', 'Anchor', { default: '{ x: 0, y: 0 }' }),
+        field('dashes', 'Vec<f64>', { default: 'new Float64Array([4, 2])' }),
+      ],
+    },
+    {
+      kind: 'struct',
+      name: 'Label',
+      doc: '',
+      api: { record: true, emits: 'label' },
+      fields: [field('text', 'String'), field('size', 'Option<f64>')],
+    },
+    {
+      kind: 'struct',
+      name: 'Path',
+      doc: '',
+      api: { record: true },
+      fields: [field('xs', 'Vec<f32>'), field('ys', 'Vec<f32>')],
+    },
+    {
+      kind: 'struct',
+      name: 'Bounds',
+      doc: '',
+      api: { record: true },
+      fields: [field('width', 'f64'), field('height', 'Option<f64>')],
+    },
+    {
+      kind: 'class',
+      name: 'Line',
+      doc: '',
+      api: { class: true, options: 'LineStyle' },
+      methods: [
+        method(
+          'new',
+          [
+            ['color', 'String'],
+            ['anchor', 'Anchor'],
+            ['dashes', 'Vec<f64>'],
+          ],
+          {},
+          ['constructor'],
+        ),
+        method('set_color', [['color', 'String']], {}, ['setter']),
+        method('set_anchor', [['anchor', 'Anchor']], {}, ['setter']),
+        method('set_dashes', [['dashes', 'Vec<f64>']], {}, ['setter']),
+        method(
+          'set_label_property',
+          [
+            ['id', 'u32'],
+            ['name', '&str'],
+            ['value', 'JsValue'],
+          ],
+          { keyed: 'Label' },
+        ),
+        method(
+          'draw',
+          [
+            ['xs', '&[f32]'],
+            ['width', 'u32'],
+            ['ys', '&[f32]'],
+          ],
+          { takes: 'Path' },
+        ),
+        method('bounds', [], { returns: 'Bounds' }, [], 'JsValue'),
+      ],
+    },
+  ],
+});
+const FAKE_WASM = `export const made = [];
+export class Line {
+  constructor(...args) { this.log = [['new', ...args]]; made.push(this); }
+  set color(v) { this.log.push(['color', v]); }
+  set anchor(v) { this.log.push(['anchor', v]); }
+  set dashes(v) { this.log.push(['dashes', v]); }
+  setLabelProperty(...args) { this.log.push(['label', ...args]); }
+  draw(...args) { this.log.push(['draw', ...args]); }
+  bounds() { return this.returning; }
+  free() {}
+}
+`;
+
+test('a class: its options kept and read from the copy, a field emitting, properties by key, a record taken, one returned', () => {
+  const [line] = classes(drawn);
+  const [draw, bounds] = line?.methods ?? [];
+
+  assert.deepEqual(
+    line?.kept.map((k) => [k.name, k.setter !== undefined, k.emits]),
+    [
+      ['color', true, 'restyle'],
+      ['anchor', true, undefined],
+      ['dashes', true, undefined],
+    ],
+  );
+  assert.deepEqual(
+    line?.keyed.map((k) => [k.struct, k.defaults, camelOf(k.method.name), k.getter, k.key, k.emits]),
+    [['Label', false, 'setLabelProperty', 'getLabelProperty', 'u32', 'label']],
+  );
+  assert.deepEqual(line?.emitted, ['restyle', 'label']);
+  assert.deepEqual(
+    line?.methods.map((m) => m.name),
+    ['draw', 'bounds'],
+  );
+  assert.deepEqual(draw && taken(drawn, draw), [{ record: 'Path', name: 'path', fields: ['xs', 'ys'] }]);
+  assert.equal(bounds && returned(drawn, bounds), 'Bounds');
+});
+
+test("a class's facade run over a wasm module: copies kept and frozen, setters emitting, keys held, records taken and checked", async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'wasm-facade-'));
+  const config = { wasm: './wasm.js', types: { Anchor: '{ x: number; y: number }' } } as unknown as Config;
+
+  writeFileSync(join(dir, 'wasm.js'), FAKE_WASM);
+  writeFileSync(join(dir, 'api.ts'), facade(drawn, config, 'api.ts'));
+
+  const wasm = (await import(join(dir, 'wasm.js'))) as { made: { log: unknown[][]; returning: unknown }[] };
+  const { Line, pathBuffers } = await import(join(dir, 'api.ts'));
+  const anchor = { x: 1, y: 2 };
+  const line = new Line({ anchor });
+  const inner = wasm.made[0];
+
+  // Kept: the defaults and the options given, copied; read from the copy, frozen; a typed array handed out a copy
+  anchor.x = 9;
+  assert.deepEqual(line.anchor, { x: 1, y: 2 });
+  assert.ok(Object.isFrozen(line.anchor));
+  assert.equal(line.color, '#000');
+  line.dashes[0] = 99;
+  assert.deepEqual([...line.dashes], [4, 2]);
+
+  // A setter keeps the value, makes the call, then emits; a field without `emits` emits nothing
+  const events: unknown[] = [];
+  const stop = line.on('restyle', (e: unknown) => events.push(['restyle', e]));
+
+  line.on('label', (e: unknown) => events.push(['label', e]));
+  line.color = 'red';
+  line.anchor = { x: 3, y: 4 };
+  stop();
+  line.color = 'blue';
+  assert.equal(line.color, 'blue');
+  assert.deepEqual(inner?.log.slice(1, 4), [
+    ['color', 'red'],
+    ['anchor', { x: 3, y: 4 }],
+    ['color', 'blue'],
+  ]);
+
+  // By key: held per key (none: undefined, a record giving no defaults), the call made, the event emitted
+  assert.equal(line.getLabelProperty(7, 'text'), undefined);
+  assert.equal(line.setLabelProperty(7, 'text', 'A').setLabelProperty(7, 'size', 12), line);
+  assert.equal(line.getLabelProperty(7, 'text'), 'A');
+  assert.equal(line.getLabelProperty(8, 'text'), undefined);
+  assert.deepEqual(events, [
+    ['restyle', { color: 'red' }],
+    ['label', { key: 7, name: 'text', value: 'A' }],
+    ['label', { key: 7, name: 'size', value: 12 }],
+  ]);
+
+  // A record taken as one object, its fields passed in the parameters' places; its buffers listed once each
+  const buffer = new Float32Array(4);
+  const path = { xs: buffer.subarray(0, 2), ys: buffer.subarray(2) };
+
+  line.draw(path, 3);
+  assert.deepEqual(inner?.log.at(-1), ['draw', path.xs, 3, path.ys]);
+  assert.deepEqual(pathBuffers(path), [buffer.buffer]);
+
+  // A record returned, checked: as declared it is returned; else a TypeError naming the field
+  if (inner) inner.returning = { width: 2 };
+  assert.deepEqual(line.bounds(), { width: 2 });
+  if (inner) inner.returning = { width: 2, height: 'tall' };
+  assert.throws(() => line.bounds(), /Bounds\.height is string, number expected/);
+});
+
+test('takes, keyed and returns name what is declared, in the shape they need', () => {
+  const broken = (keys: Record<string, string>, params: [string, string][] = [['id', 'u32']]) =>
+    checkedApi({
+      ...drawn,
+      items: [
+        ...drawn.items.slice(0, 4),
+        { kind: 'class', name: 'Bad', doc: '', api: { class: true }, methods: [method('bad', params, keys)] },
+      ],
+    });
+
+  assert.throws(() => classes(broken({ keyed: 'Label' })), /its parameters are \(key, name, value\)/);
+  assert.throws(() => classes(broken({ keyed: 'Nothing' })), /no struct declared options or record/);
+  assert.throws(() => taken(broken({}), method('bad', [['xs', '&[f32]']], { takes: 'Path' })), /no parameter ys/);
+  assert.throws(() => returned(drawn, method('bad', [], { returns: 'LineStyle' })), /no struct declared record/);
 });
 
 test('Rust in Python: hints, literals, documentation in snake_case', () => {

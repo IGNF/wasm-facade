@@ -19,6 +19,24 @@
   `emit`; Python an `on`, React Native `<HOST>_EVENTS`, the web component the DOM names (`EVENTS`, `prefix`), the
   references their lists. The extractor reads a variant's keys and fields.
 
+- Options kept by the facade: a class with `options = "<struct>"` keeps a copy of them; each option is a property
+  read from that copy, never from the wasm module (objects and arrays frozen, typed arrays copied), its wasm-bindgen
+  setter keeping the value then making the call. The other targets list them as properties.
+- Change events: `emits = "<event>"` on an options struct or a field makes the class's setter emit `{ <field>: value }`
+  once the value is kept and the call made (`<Class>Events`, `on`); the `settings` pattern reads it too (`emits`), for
+  plugins.
+- Properties by key: a method `(key, name, value)` with `keyed = "<struct>"` (options, their defaults, or a record)
+  is `setXProperty(key, name, value)` and `getXProperty(key, name)` over each key's properties held by the facade;
+  with `emits`, `{ key, name, value }`.
+- Records taken: `takes = "<record>, …"` on a function or a method takes the parameters named as a record's fields as
+  one object of it (Python a dict), a record of typed arrays its buffers listed to transfer it (`<record>Buffers`).
+- Records returned: `returns = "<record>"` on a function or a method returning a `JsValue` types its result as that
+  record and checks it (`checked<Record>`: a `TypeError` naming the field not as declared).
+
+### Changed
+
+- A class with `options` reads its options' properties from the facade's copy, no longer from the wasm module.
+
 ### Fixed
 
 - `kebab` of a capitalized name has no leading dash (`Preview`: `preview`).
