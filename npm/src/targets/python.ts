@@ -31,6 +31,9 @@ import {
   classes,
   converters,
   functions,
+  type Host,
+  type HostMethod,
+  hosts,
   type Options,
   options,
   type Setting,
@@ -199,6 +202,32 @@ const settingsPart = (api: Api, types: Types, struct: string, all: Setting[]): s
   '',
 ];
 
+/** A host method's hint and its result's: an optional parameter `= None` */
+const hostMethod = (api: Api, types: Types, m: HostMethod): string[] => {
+  const params = m.params.map((p) => {
+    const inner = p.optional ? p.rust.replace(/^Option<(.*)>$/, '$1') : p.rust;
+    const hint = p.py ?? pyTypeOf(api, inner, types);
+
+    return p.optional ? `${snake(p.name)}: ${hint} | None = None` : `${snake(p.name)}: ${hint}`;
+  });
+  const result = m.py ?? (m.returns ? pyTypeOf(api, m.returns, types) : 'None');
+
+  return [
+    `    def ${snake(m.name)}(${['self', ...params].join(', ')}) -> ${m.async || m.animation ? `Awaitable[${result}]` : result}:`,
+    ...docstring('        ', m.animation ? `${m.doc} (awaited: once the animation ends)` : m.doc),
+    `        return self._call(${[`"${m.name}"`, ...m.params.map((p) => snake(p.name))].join(', ')})`,
+  ];
+};
+
+/** A host's mixin: the methods of the hand-written class, carried by name to it */
+const hostPart = (api: Api, types: Types, h: Host): string[] => [
+  `class ${h.name}Api(Transport):`,
+  ...docstring('    ', `${h.doc || `The methods of \`${h.name}\``}: over what the class inheriting them gives`),
+  '',
+  ...(h.methods.length ? h.methods.flatMap((m) => [...hostMethod(api, types, m), '']) : ['    pass', '']),
+  '',
+];
+
 const functionsPart = (api: Api, types: Types, name: string): string[] => {
   const fns = functions(api);
 
@@ -234,6 +263,7 @@ export const file = (api: Api, own: Context['options']): string => {
     ...options(api).flatMap((o) => optionsPart(api, types, o)),
     ...functionsPart(api, types, option(own, 'functions', 'FunctionsApi')),
     ...classes(api).flatMap((c) => classPart(api, types, c)),
+    ...hosts(api).flatMap((h) => hostPart(api, types, h)),
     ...structs.flatMap((s) =>
       settingsPart(
         api,

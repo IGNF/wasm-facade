@@ -22,6 +22,9 @@ import {
   converters,
   eventsName,
   functions,
+  type Host,
+  type HostMethod,
+  hosts,
   type Options,
   options,
   type Union,
@@ -227,6 +230,31 @@ const classCode = (api: Api, config: Config, c: Class): string[] => {
   ];
 };
 
+/** A host method's parameters and result in TypeScript: an optional parameter without its `undefined` */
+const hostSignature = (api: Api, config: Config, m: HostMethod): string => {
+  const params = m.params.map((p) => {
+    const inner = p.optional ? p.rust.replace(/^Option<(.*)>$/, '$1') : p.rust;
+
+    return `${p.name}${p.optional ? '?' : ''}: ${p.ts ?? tsTypeOf(api, inner, config.types)}`;
+  });
+  const result = m.ts ?? (m.returns ? tsTypeOf(api, m.returns, config.types) : 'void');
+
+  return `(${params.join(', ')}): ${m.async || m.animation ? `Promise<${result}>` : result}`;
+};
+
+/** A host's base class: each method declared, the hand-written class (`class Preview extends PreviewApi`)
+ * implementing them; tsc fails where it does not follow the declarations */
+const hostCode = (api: Api, config: Config, h: Host): string[] => [
+  tsDoc(h.doc || `The methods declared for ${h.name}: the hand-written class implements them`),
+  `export abstract class ${h.name}Api {`,
+  ...h.methods.flatMap((m) => [
+    tsDoc(m.animation ? `${m.doc}\n\nResolved once the animation ends` : m.doc, '  '),
+    `  abstract ${m.name}${hostSignature(api, config, m)};`,
+  ]),
+  '}',
+  '',
+];
+
 /** The facade's text */
 export const facade = (api: Api, config: Config, out: string): string => {
   const wasm = config.wasm ?? './pkg/index.js';
@@ -246,6 +274,7 @@ export const facade = (api: Api, config: Config, out: string): string => {
     ...options(api).flatMap((o) => optionsCode(api, config, o)),
     ...functions(api).flatMap((f) => functionCode(api, config, f)),
     ...classes(api).flatMap((c) => classCode(api, config, c)),
+    ...hosts(api).flatMap((h) => hostCode(api, config, h)),
   ]);
 };
 

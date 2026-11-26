@@ -18,6 +18,8 @@ export interface Field {
 export interface Param {
   name: string;
   type: string;
+  /** Its own keys, where it has some (`#[api(ts = "…")] camera: Camera`) */
+  api?: Attributes;
 }
 
 /** A function's or a method's signature as exported */
@@ -35,7 +37,7 @@ export interface Signature {
 }
 
 export interface Declared {
-  kind: 'struct' | 'enum' | 'function' | 'class';
+  kind: 'struct' | 'enum' | 'function' | 'class' | 'host';
   name: string;
   doc: string;
   api: Attributes;
@@ -188,6 +190,8 @@ export const tsTypeOf = (api: Api, rust: string, types: Record<string, string> =
   const declared = enumOf(api, ty);
 
   if (declared) return declared.name;
+  // A declared struct the facade writes as an interface: options (given as their `Init`, defaults left out)
+  if (api.items.some((item) => item.kind === 'struct' && item.name === ty && item.api.options)) return `${ty}Init`;
   throw new Error(`wasm-facade: no TypeScript for the Rust type ${rust}: give it in wasm-facade.toml's [types]`);
 };
 
@@ -227,6 +231,8 @@ export const pyTypeOf = (api: Api, rust: string, types: Record<string, string> =
   const declared = enumOf(api, ty);
 
   if (declared) return declared.name;
+  // A declared options struct: its `TypedDict`, every key optional
+  if (api.items.some((item) => item.kind === 'struct' && item.name === ty && item.api.options)) return ty;
   throw new Error(`wasm-facade: no Python for the Rust type ${rust}: give it in [targets.python.types]`);
 };
 

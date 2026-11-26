@@ -1,5 +1,6 @@
 //! Image filters for the web: the example of a project using wasm-facade. Its public API is declared here, once: wasm-facade
-//! writes its TypeScript facade, its React hooks and its reference from these declarations.
+//! writes its TypeScript facade, its React hooks, its Python, its references and the rest from these declarations,
+//! including the methods of a class written by hand in TypeScript (`PreviewHost`).
 
 use wasm_bindgen::prelude::*;
 
@@ -169,6 +170,21 @@ impl Blur {
             let _ = listener.call1(&JsValue::NULL, &JsValue::from(done as f64 / total as f64));
         }
     }
+}
+
+// A class written by hand in TypeScript (`src/preview.ts`), its methods declared here once for every binding; the
+// trait is never compiled
+/// A blur's preview: an image on a canvas, blurred as it is shown
+#[cfg(wasm_facade)]
+#[api(host = "Preview")]
+pub trait PreviewHost {
+    /// Shows an image, blurred by the options given (the blur's defaults else)
+    async fn show(#[api(ts = "ImageData", py = "Any")] image: Image, options: Option<BlurOptions>);
+    /// Moves the blur's radius to `radius` over `duration` milliseconds (300 by default)
+    #[api(animation)]
+    fn fade_to(radius: f64, duration: Option<f64>);
+    /// The pixels shown, RGBA
+    fn pixels() -> Vec<u8>;
 }
 
 /// The histogram of an image's luminance: 256 counts

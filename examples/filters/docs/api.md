@@ -33,6 +33,14 @@ Events (`on(type, listener)`, returning what stops it):
 
 - `progress` (`number`): The share of the image blurred, 0 to 1
 
+## `Preview`
+
+A blur's preview: an image on a canvas, blurred as it is shown
+
+- `show(image, options?)` → `Promise<void>`: Shows an image, blurred by the options given (the blur's defaults else)
+- `fadeTo(radius, duration?)` → `Promise<void>`: Moves the blur's radius to `radius` over `duration` milliseconds (300 by default) (resolved once the animation ends)
+- `pixels()` → `Uint8Array`: The pixels shown, RGBA
+
 ## Options
 
 ### `BlurOptions`

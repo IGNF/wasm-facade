@@ -4,7 +4,7 @@
  * defaults, the methods of each class and settings, the unions
  */
 import { type Api, camel, pyDoc, pyLiteral, pyTypeOf, type Signature, snake } from '../model.ts';
-import { classes, converters, functions, options, settings, unions } from '../patterns.ts';
+import { classes, converters, functions, hosts, options, settings, unions } from '../patterns.ts';
 import { type Context, type Output, option, type Target } from '../target.ts';
 
 type Types = Record<string, string>;
@@ -63,6 +63,22 @@ export const pythonReference: Target = {
         ),
         ...c.methods.map((m) => `- ${signature(api, types, m)}: ${pyDoc(m.doc)}`),
         ...c.events.map((e) => `- \`on("${e.name}", listener)\`: ${pyDoc(e.method.doc)}`),
+        '',
+      ]),
+      ...hosts(api).flatMap((h) => [
+        `## \`${h.name}\` (\`${h.name}Api\`)`,
+        '',
+        ...(h.doc ? [pyDoc(h.doc), ''] : []),
+        ...h.methods.map((m) => {
+          const params = m.params.map((p) => {
+            const inner = p.optional ? p.rust.replace(/^Option<(.*)>$/, '$1') : p.rust;
+
+            return `${snake(p.name)}: ${p.py ?? pyTypeOf(api, inner, types)}${p.optional ? ' | None = None' : ''}`;
+          });
+          const result = m.py ?? (m.returns ? pyTypeOf(api, m.returns, types) : 'None');
+
+          return `- \`${snake(m.name)}(${params.join(', ')})\` → \`${m.async || m.animation ? `Awaitable[${result}]` : result}\`: ${pyDoc(m.doc)}`;
+        }),
         '',
       ]),
       ...structs.flatMap((s) => [

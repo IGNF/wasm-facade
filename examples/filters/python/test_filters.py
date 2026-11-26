@@ -1,6 +1,6 @@
 """The generated Python API over the example's recording transport: names, defaults, options left out"""
 
-from filters import Blur, Filters, blur_options
+from filters import Blur, Filters, Preview, blur_options
 
 
 def test() -> None:
@@ -13,6 +13,11 @@ def test() -> None:
     blur.on("progress", print)
     assert blur.calls == [("applyLater", (b"\0\0\0\0", 1, 1)), ("on", ("progress",))]
     assert blur_options(edge=None) == {"edge": None}
+
+    preview = Preview()
+    preview.show(b"", blur_options(radius=2))
+    preview.fade_to(4)
+    assert preview.calls == [("show", (b"", {"radius": 2})), ("fadeTo", (4, None))]
 
     filters = Filters()
     filters.histogram(b"")

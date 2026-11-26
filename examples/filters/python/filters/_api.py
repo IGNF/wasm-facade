@@ -107,3 +107,20 @@ class BlurApi(Transport):
     def on(self, event: Literal["progress"], listener: Callable[[Any], None]) -> Callable[[], None]:
         """Listens to an event ("progress": The share of the image blurred, 0 to 1), returns what stops it"""
         return self._on(event, listener)
+
+
+class PreviewApi(Transport):
+    """A blur's preview: an image on a canvas, blurred as it is shown: over what the class inheriting them gives"""
+
+    def show(self, image: Any, options: BlurOptions | None = None) -> Awaitable[None]:
+        """Shows an image, blurred by the options given (the blur's defaults else)"""
+        return self._call("show", image, options)
+
+    def fade_to(self, radius: float, duration: float | None = None) -> Awaitable[None]:
+        """Moves the blur's radius to `radius` over `duration` milliseconds (300 by default) (awaited: once the
+        animation ends)"""
+        return self._call("fadeTo", radius, duration)
+
+    def pixels(self) -> bytes | Sequence[int]:
+        """The pixels shown, RGBA"""
+        return self._call("pixels")

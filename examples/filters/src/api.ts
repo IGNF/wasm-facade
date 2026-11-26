@@ -98,3 +98,15 @@ export class Blur {
     this.#inner.free();
   }
 }
+
+/** A blur's preview: an image on a canvas, blurred as it is shown */
+export abstract class PreviewApi {
+  /** Shows an image, blurred by the options given (the blur's defaults else) */
+  abstract show(image: ImageData, options?: BlurOptionsInit): Promise<void>;
+  /** Moves the blur's radius to `radius` over `duration` milliseconds (300 by default)
+   *
+   * Resolved once the animation ends */
+  abstract fadeTo(radius: number, duration?: number): Promise<void>;
+  /** The pixels shown, RGBA */
+  abstract pixels(): Uint8Array;
+}
