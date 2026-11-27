@@ -104,6 +104,15 @@
           "type": "array",
           "items": { "$ref": "#/$defs/signature" }
         },
+        "deps": {
+          "description": "A class's dependencies, its `deps` key (`\"map: GeoMap, engine: Engine\"`) read in their order: each a name and its type as the project gives it (TypeScript's), taken first by the constructor; where it has a `deps` key",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type"],
+            "properties": { "name": { "type": "string" }, "type": { "type": "string" } }
+          }
+        },
         "export": { "description": "A function's (and its signature's other keys)", "type": "string" },
         "params": { "type": "array", "items": { "$ref": "#/$defs/param" } },
         "returns": { "type": ["string", "null"] },

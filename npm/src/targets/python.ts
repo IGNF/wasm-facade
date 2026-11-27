@@ -9,11 +9,14 @@
  * - the functions, each class and each settings struct a mixin (`FunctionsApi`, `BlurApi`, `ViewSettingsApi`): its
  *   methods in snake_case with typed arguments and docstrings, each one handing its call to the class inheriting it
  *   (`_call(name, *args)`, `_get(name)`, `_set(name, value)`, `_on(event, listener)`, described by `Transport`), by
- *   the facade's names (`applyLater`, `setMinZoom`).
+ *   the facade's names (`applyLater`, `setMinZoom`). A class's properties stay Python properties whatever the
+ *   configuration's `accessors`: read and set by `_get`/`_set`, or by `_call("getRadius")`/`_call("setRadius", v)`
+ *   when the facade writes them as methods.
  *
  * What carries the call is the project's: a widget calling the TypeScript facade in a browser, a React Native bridge,
  * or native code. The generated API does not change with it.
  */
+import type { Config } from '../config.ts';
 import {
   type Api,
   camel,
@@ -23,11 +26,13 @@ import {
   pyTypeOf,
   type Signature,
   snake,
+  structOf,
   upperFirst,
   wrap,
 } from '../model.ts';
 import {
   type ApiRecord,
+  accessorNames,
   type Class,
   classes,
   converters,
@@ -39,8 +44,10 @@ import {
   type Options,
   options,
   records,
+  returned,
   type Setting,
   settings,
+  taken,
   unions,
 } from '../patterns.ts';
 import { type Context, type Output, option, type Target } from '../target.ts';
@@ -77,13 +84,30 @@ const docstring = (indent: string, summary: string, args: { name: string; doc: s
 const paramType = (api: Api, types: Types, sig: { api: Signature['api'] }, p: Signature['params'][number]): string =>
   converters(sig)[p.name] ? 'Any' : pyTypeOf(api, p.type, types);
 
+/** A result's hint: the record it `returns`, else its type's */
 const returnType = (api: Api, types: Types, sig: Signature): string =>
-  sig.returns ? pyTypeOf(api, sig.returns, types) : 'None';
+  returned(api, sig) ?? (sig.returns ? pyTypeOf(api, sig.returns, types) : 'None');
 
-/** A method handing its call on by the facade's name */
+/** A method handing its call on by the facade's name: the parameters a record `takes` given as one dict of it */
 const method = (api: Api, types: Types, sig: Signature, name = snake(camel(sig.export))): string[] => {
-  const params = sig.params.map((p) => `${p.name}: ${paramType(api, types, sig, p)}`);
-  const args = sig.params.map((p) => p.name);
+  const groups = taken(api, sig);
+  const placed = new Set<string>();
+  const params: string[] = [];
+  const args: string[] = [];
+
+  for (const p of sig.params) {
+    const group = groups.find((g) => g.fields.includes(p.name));
+
+    if (!group) {
+      params.push(`${p.name}: ${paramType(api, types, sig, p)}`);
+      args.push(p.name);
+    } else if (!placed.has(group.name)) {
+      placed.add(group.name);
+      params.push(`${snake(group.name)}: ${group.record}`);
+      args.push(snake(group.name));
+    }
+  }
+
   const returns = returnType(api, types, sig);
 
   return [
@@ -144,30 +168,79 @@ const optionsPart = (api: Api, types: Types, o: Options): string[] => {
   ];
 };
 
-const classPart = (api: Api, types: Types, c: Class): string[] => {
+const classPart = (api: Api, types: Types, c: Class, accessors: Config['accessors']): string[] => {
+  // A property stays one in Python; read and set by the facade's names: `radius`, or `getRadius`/`setRadius`
+  const get = (name: string) =>
+    accessors === 'methods' ? `self._call("${accessorNames(name, accessors).getter}")` : `self._get("${name}")`;
+  const set = (name: string) =>
+    accessors === 'methods'
+      ? `self._call("${accessorNames(name, accessors).setter}", value)`
+      : `self._set("${name}", value)`;
+  const events = [
+    ...c.events.map((e) => ({ name: e.name, doc: e.method.doc })),
+    ...c.emitted.map((name) => ({ name, doc: 'a property changed by its setter' })),
+  ];
   const members = [
-    ...c.properties.flatMap((p) => [
+    // The options the facade keeps: read from its copy, set where wasm-bindgen exports a setter
+    ...c.kept.flatMap((k) => [
       '    @property',
-      `    def ${snake(p.name)}(self) -> ${returnType(api, types, p.getter)}:`,
-      ...docstring('        ', p.getter.doc),
-      `        return self._get("${p.name}")`,
-      ...(p.setter
+      `    def ${snake(k.name)}(self) -> ${pyTypeOf(api, k.rust, types)}:`,
+      ...docstring('        ', k.doc),
+      `        return ${get(k.name)}`,
+      ...(k.setter
         ? [
             '',
-            `    @${snake(p.name)}.setter`,
-            `    def ${snake(p.name)}(self, value: ${paramType(api, types, p.setter, p.setter.params[0] ?? { name: 'value', type: 'JsValue' })}) -> None:`,
-            `        self._set("${p.name}", value)`,
+            `    @${snake(k.name)}.setter`,
+            `    def ${snake(k.name)}(self, value: ${pyTypeOf(api, k.rust, types)}) -> None:`,
+            `        ${set(k.name)}`,
           ]
         : []),
       '',
     ]),
+    ...c.properties
+      .filter((p) => !c.kept.some((k) => k.name === p.name))
+      .flatMap((p) => [
+        '    @property',
+        `    def ${snake(p.name)}(self) -> ${returnType(api, types, p.getter)}:`,
+        ...docstring('        ', p.getter.doc),
+        `        return ${get(p.name)}`,
+        ...(p.setter
+          ? [
+              '',
+              `    @${snake(p.name)}.setter`,
+              `    def ${snake(p.name)}(self, value: ${paramType(api, types, p.setter, p.setter.params[0] ?? { name: 'value', type: 'JsValue' })}) -> None:`,
+              `        ${set(p.name)}`,
+            ]
+          : []),
+        '',
+      ]),
+    // Properties by key: each key's held by the facade
+    ...c.keyed.flatMap((k) => {
+      const [key, name, value] = k.method.params.map((p) => p.name);
+      const keyHint = pyTypeOf(api, k.key, types);
+      const names = `Literal[${(structOf(api, k.struct).fields ?? []).map((f) => `"${camel(f.name)}"`).join(', ')}]`;
+
+      return [
+        `    def ${snake(camel(k.method.export))}(self, ${key}: ${keyHint}, ${name}: ${names}, ${value}: Any) -> None:`,
+        ...docstring('        ', k.method.doc),
+        `        self._call("${camel(k.method.export)}", ${key}, ${name}, ${value})`,
+        '',
+        `    def ${snake(k.getter)}(self, ${key}: ${keyHint}, ${name}: ${names}) -> Any:`,
+        ...docstring(
+          '        ',
+          `The property \`${name}\` of \`${key}\`, as last set${k.defaults ? ' (its default else)' : ''}`,
+        ),
+        `        return self._call("${k.getter}", ${key}, ${name})`,
+        '',
+      ];
+    }),
     ...c.methods.flatMap((m) => [...method(api, types, m), '']),
-    ...(c.events.length
+    ...(events.length
       ? [
-          `    def on(self, event: Literal[${c.events.map((e) => `"${e.name}"`).join(', ')}], listener: Callable[[Any], None]) -> Callable[[], None]:`,
+          `    def on(self, event: Literal[${events.map((e) => `"${e.name}"`).join(', ')}], listener: Callable[[Any], None]) -> Callable[[], None]:`,
           ...docstring(
             '        ',
-            `Listens to an event (${c.events.map((e) => `"${e.name}": ${e.method.doc}`).join('; ')}), returns what stops it`,
+            `Listens to an event (${events.map((e) => `"${e.name}": ${e.doc}`).join('; ')}), returns what stops it`,
           ),
           '        return self._on(event, listener)',
           '',
@@ -299,7 +372,7 @@ const functionsPart = (api: Api, types: Types, name: string): string[] => {
   ];
 };
 
-export const file = (api: Api, own: Context['options']): string => {
+export const file = (api: Api, own: Context['options'], accessors: Config['accessors'] = 'properties'): string => {
   const types = typesOf(own);
   const declared = settings(api, { callKey: option(own, 'call_key', 'call') });
   const structs = [...new Set(declared.map((s) => s.struct))];
@@ -308,7 +381,7 @@ export const file = (api: Api, own: Context['options']): string => {
     ...options(api).flatMap((o) => optionsPart(api, types, o)),
     ...records(api).flatMap((r) => recordPart(api, types, r)),
     ...functionsPart(api, types, option(own, 'functions', 'FunctionsApi')),
-    ...classes(api).flatMap((c) => classPart(api, types, c)),
+    ...classes(api).flatMap((c) => classPart(api, types, c, accessors)),
     ...hosts(api).flatMap((h) => hostPart(api, types, h)),
     ...structs.flatMap((s) =>
       settingsPart(
@@ -372,8 +445,8 @@ export const file = (api: Api, own: Context['options']): string => {
 
 export const python: Target = {
   name: 'python',
-  outputs: ({ api, options: own }: Context): Output[] => [
-    { path: option(own, 'out', 'python/_api.py'), text: file(api, own) },
+  outputs: ({ api, config, options: own }: Context): Output[] => [
+    { path: option(own, 'out', 'python/_api.py'), text: file(api, own, config.accessors) },
   ],
 };
 

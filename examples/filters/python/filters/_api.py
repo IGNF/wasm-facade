@@ -35,13 +35,17 @@ class Transport:
         raise NotImplementedError(f"{type(self).__name__} gives no transport (_on)")
 
 
+Channel = Literal["red", "green", "blue", "alpha"]
+"""A channel of an RGBA image: "red" (Red), "green" (Green), "blue" (Blue), "alpha" (Opacity)"""
+
+
 Edge = Literal["clamp", "wrap"]
 """How a filter reads past the image's edges: "clamp" (The nearest pixel inside), "wrap" (The pixel on the other
 side)"""
 
 
 class BlurOptions(TypedDict, total=False):
-    """A blur's options
+    """A blur's options: kept by the facade, each a property of the blur, its setter emitting `change`
 
     radius: Its radius, pixels
     edge: How it reads past the edges
@@ -63,13 +67,68 @@ def blur_options(
     radius: float | None = UNSET,
     edge: Edge | None = UNSET,
 ) -> BlurOptions:
-    """A blur's options: the options given (an option not given is left out, None given is passed on)
+    """A blur's options: kept by the facade, each a property of the blur, its setter emitting `change`: the options
+    given (an option not given is left out, None given is passed on)
 
     radius: Its radius, pixels
     edge: How it reads past the edges
     """
     given = {"radius": radius, "edge": edge}
     return cast(BlurOptions, {key: value for key, value in given.items() if value is not UNSET})
+
+
+class Levels(TypedDict, total=False):
+    """A channel's levels: its input range stretched to the whole, then its gamma; the facade keeps them by channel
+    and its setter emits `change`
+
+    black: The input's black point, 0 to 255
+    white: The input's white point, 0 to 255
+    gamma: The gamma applied once stretched (1 leaves the midtones)
+    """
+
+    black: float
+    white: float
+    gamma: float
+
+
+LEVELS_DEFAULTS: Levels = {
+    "black": 0,
+    "white": 255,
+    "gamma": 1,
+}
+"""`Levels`'s defaults, those the Rust declares"""
+
+
+def levels(
+    *,
+    black: float | None = UNSET,
+    white: float | None = UNSET,
+    gamma: float | None = UNSET,
+) -> Levels:
+    """A channel's levels: its input range stretched to the whole, then its gamma; the facade keeps them by channel
+    and its setter emits `change`: the options given (an option not given is left out, None given is passed on)
+
+    black: The input's black point, 0 to 255
+    white: The input's white point, 0 to 255
+    gamma: The gamma applied once stretched (1 leaves the midtones)
+    """
+    given = {"black": black, "white": white, "gamma": gamma}
+    return cast(Levels, {key: value for key, value in given.items() if value is not UNSET})
+
+
+class Planes(TypedDict):
+    """An image's planes, one byte per pixel each: what `interleave` takes as one object
+
+    red: The red bytes
+    green: The green bytes
+    blue: The blue bytes
+    alpha: The opacity's bytes
+    """
+
+    red: bytes | Sequence[int]
+    green: bytes | Sequence[int]
+    blue: bytes | Sequence[int]
+    alpha: bytes | Sequence[int]
 
 
 Size = tuple[int, int]
@@ -89,12 +148,33 @@ class Snapshot(TypedDict):
     shownAt: float | None
 
 
+class Stats(TypedDict):
+    """An image's luminance at a glance
+
+    pixels: Its pixels
+    mean: Its mean, 0 to 255
+    range: Its darkest and its lightest, if it has pixels
+    """
+
+    pixels: int
+    mean: float
+    range: Size | None
+
+
 class FunctionsApi(Transport):
     """The functions, over what the class inheriting them gives"""
 
     def histogram(self, image: Any) -> Sequence[int]:
         """The histogram of an image's luminance: 256 counts"""
         return self._call("histogram", image)
+
+    def interleave(self, planes: Planes) -> bytes | Sequence[int]:
+        """Planes interleaved as RGBA pixels, as long as the shortest"""
+        return self._call("interleave", planes)
+
+    def stats(self, image: Any) -> Stats:
+        """An image's luminance at a glance: a JS object the facade checks as a `Stats`"""
+        return self._call("stats", image)
 
 
 class BlurApi(Transport):
@@ -109,6 +189,15 @@ class BlurApi(Transport):
     def radius(self, value: float) -> None:
         self._set("radius", value)
 
+    @property
+    def edge(self) -> Edge:
+        """How it reads past the edges"""
+        return self._get("edge")
+
+    @edge.setter
+    def edge(self, value: Edge) -> None:
+        self._set("edge", value)
+
     def apply(self, image: Any, width: int, height: int) -> None:
         """Blurs an image in place"""
         return self._call("apply", image, width, height)
@@ -121,8 +210,30 @@ class BlurApi(Transport):
         """Blurs the rows a predicate keeps"""
         return self._call("applyWhere", image, width, keep)
 
-    def on(self, event: Literal["progress"], listener: Callable[[Any], None]) -> Callable[[], None]:
-        """Listens to an event ("progress": The share of the image blurred, 0 to 1), returns what stops it"""
+    def on(self, event: Literal["progress", "change"], listener: Callable[[Any], None]) -> Callable[[], None]:
+        """Listens to an event ("progress": The share of the image blurred, 0 to 1; "change": a property changed by
+        its setter), returns what stops it"""
+        return self._on(event, listener)
+
+
+class GradeApi(Transport):
+    """A grade: levels per channel, applied to RGBA pixels in place: the methods of `Grade`, over what the class
+    inheriting them gives"""
+
+    def set_levels_property(self, channel: Channel, name: Literal["black", "white", "gamma"], value: Any) -> None:
+        """Sets one of a channel's levels"""
+        self._call("setLevelsProperty", channel, name, value)
+
+    def get_levels_property(self, channel: Channel, name: Literal["black", "white", "gamma"]) -> Any:
+        """The property `name` of `channel`, as last set (its default else)"""
+        return self._call("getLevelsProperty", channel, name)
+
+    def apply(self, image: Any) -> None:
+        """Grades an image in place"""
+        return self._call("apply", image)
+
+    def on(self, event: Literal["change"], listener: Callable[[Any], None]) -> Callable[[], None]:
+        """Listens to an event ("change": a property changed by its setter), returns what stops it"""
         return self._on(event, listener)
 
 

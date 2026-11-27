@@ -1,7 +1,7 @@
 // Made by wasm-facade (react) from the Rust declarations: not to edit
 
 import { useEffect, useMemo } from 'react';
-import { Blur, type BlurEvents, type BlurOptionsInit } from './api.ts';
+import { Blur, type BlurEvents, type BlurOptionsInit, Grade } from './api.ts';
 
 /** A Blur kept while its options are the same, freed after */
 export const useBlur = (options: BlurOptionsInit = {}): Blur => {
@@ -20,4 +20,13 @@ export const useBlurEvent = <K extends keyof BlurEvents>(
   listener: (payload: BlurEvents[K]) => void,
 ): void => {
   useEffect(() => blur.on(type, listener), [blur, type, listener]);
+};
+
+/** A Grade kept while its options are the same, freed after */
+export const useGrade = (): Grade => {
+  const grade = useMemo(() => new Grade(), []);
+
+  useEffect(() => () => grade.free(), [grade]);
+
+  return grade;
 };

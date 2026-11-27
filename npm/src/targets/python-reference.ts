@@ -4,7 +4,19 @@
  * defaults, the methods of each class and settings, the unions
  */
 import { type Api, camel, pyDoc, pyLiteral, pyTypeOf, type Signature, snake } from '../model.ts';
-import { classes, converters, eventsOf, functions, hosts, options, records, settings, unions } from '../patterns.ts';
+import {
+  classes,
+  converters,
+  eventsOf,
+  functions,
+  hosts,
+  options,
+  records,
+  returned,
+  settings,
+  taken,
+  unions,
+} from '../patterns.ts';
 import { type Context, type Output, option, type Target } from '../target.ts';
 
 type Types = Record<string, string>;
@@ -12,8 +24,20 @@ type Types = Record<string, string>;
 const cell = (doc: string): string => pyDoc(doc).replaceAll('|', '\\|');
 
 const signature = (api: Api, types: Types, sig: Signature): string => {
-  const params = sig.params.map((p) => `${p.name}: ${converters(sig)[p.name] ? 'Any' : pyTypeOf(api, p.type, types)}`);
-  const returns = sig.returns ? pyTypeOf(api, sig.returns, types) : 'None';
+  // The parameters a record `takes` named once, as that record
+  const groups = taken(api, sig);
+  const params = [
+    ...new Set(
+      sig.params.map((p) => {
+        const group = groups.find((g) => g.fields.includes(p.name));
+
+        return group
+          ? `${snake(group.name)}: ${group.record}`
+          : `${p.name}: ${converters(sig)[p.name] ? 'Any' : pyTypeOf(api, p.type, types)}`;
+      }),
+    ),
+  ];
+  const returns = returned(api, sig) ?? (sig.returns ? pyTypeOf(api, sig.returns, types) : 'None');
 
   return `\`${snake(camel(sig.export))}(${params.join(', ')})\` → \`${sig.async ? `Awaitable[${returns}]` : returns}\``;
 };
@@ -54,15 +78,33 @@ export const pythonReference: Target = {
         `### \`${c.name}\` (\`${c.name}Api\`)`,
         '',
         ...(c.doc ? [pyDoc(c.doc), ''] : []),
+        ...(c.deps.length
+          ? [
+              `Its dependencies, what the facade's constructor takes first: ${c.deps.map((d) => `\`${snake(d.name)}\` (\`${d.type}\`)`).join(', ')}.`,
+              '',
+            ]
+          : []),
         ...(c.options
           ? [`Its options: \`${c.options.name}\`, \`${snake(c.options.name).replace(/^_/, '')}(…)\`.`, '']
           : []),
-        ...c.properties.map(
-          (p) =>
-            `- \`${snake(p.name)}\` (\`${p.getter.returns ? pyTypeOf(api, p.getter.returns, types) : 'None'}\`${p.setter ? '' : ', read only'}): ${pyDoc(p.getter.doc)}`,
+        ...c.kept.map(
+          (k) =>
+            `- \`${snake(k.name)}\` (\`${pyTypeOf(api, k.rust, types)}\`${k.setter ? '' : ', read only'}): ${pyDoc(k.doc)}`,
         ),
+        ...c.properties
+          .filter((p) => !c.kept.some((k) => k.name === p.name))
+          .map(
+            (p) =>
+              `- \`${snake(p.name)}\` (\`${p.getter.returns ? pyTypeOf(api, p.getter.returns, types) : 'None'}\`${p.setter ? '' : ', read only'}): ${pyDoc(p.getter.doc)}`,
+          ),
+        ...c.keyed.map((k) => {
+          const [key, name, value] = k.method.params.map((p) => p.name);
+
+          return `- \`${snake(camel(k.method.export))}(${key}, ${name}, ${value})\`, \`${snake(k.getter)}(${key}, ${name})\`: ${pyDoc(k.method.doc)}`;
+        }),
         ...c.methods.map((m) => `- ${signature(api, types, m)}: ${pyDoc(m.doc)}`),
         ...c.events.map((e) => `- \`on("${e.name}", listener)\`: ${pyDoc(e.method.doc)}`),
+        ...c.emitted.map((e) => `- \`on("${e}", listener)\`: a property changed by its setter`),
         '',
       ]),
       ...hosts(api).flatMap((h) => [

@@ -4,7 +4,7 @@
  * them, their parameters through the project's converters, events as `on(type, listener)` returning what stops it
  */
 import { dirname, relative } from 'node:path';
-import type { Config } from '../config.ts';
+import { type Config, typeImports } from '../config.ts';
 import {
   type Api,
   camel,
@@ -13,11 +13,14 @@ import {
   joined,
   lowerFirst,
   type Signature,
+  structOf,
   tsDoc,
   tsTypeOf,
 } from '../model.ts';
 import {
   type ApiRecord,
+  accessorClashes,
+  accessorNames,
   type Class,
   classes,
   converters,
@@ -28,9 +31,12 @@ import {
   type HostEvents,
   type HostMethod,
   hosts,
+  type Keyed,
   type Options,
   options,
   records,
+  returned,
+  taken,
   type Union,
   unions,
 } from '../patterns.ts';
@@ -47,36 +53,75 @@ const unionValues = (u: Union): string => `${lowerFirst(u.name)}Values`;
 const defaultsName = (o: Options): string => `default${o.name}`;
 const initName = (o: Options): string => `${o.name}Init`;
 
-/** A parameter's TypeScript type and the expression passing it on: through its converter, its union's values */
+/** A parameter's TypeScript type and the expression passing it on (its value `value`, its name else): through its
+ * converter, its union's values */
 const param = (
   api: Api,
   config: Config,
   sig: { api: Declared['api'] },
   p: { name: string; type: string },
   callback?: string,
+  value?: string,
 ) => {
   const convert = converters(sig)[p.name];
   const name = camel(p.name);
+  const given = value ?? name;
   const union = unions(api).find((u) => u.name === p.type.replace(/^&/, ''));
 
-  if (convert) return { name, type: `Parameters<typeof convert.${convert}>[0]`, passed: `convert.${convert}(${name})` };
-  if (union) return { name, type: union.name, passed: `${unionValues(union)}[${name}]` };
-  if (callback && /Function$/.test(p.type)) return { name, type: callback, passed: name };
+  if (convert)
+    return { name, type: `Parameters<typeof convert.${convert}>[0]`, passed: `convert.${convert}(${given})` };
+  if (union) return { name, type: union.name, passed: `${unionValues(union)}[${given}]` };
+  if (callback && /Function$/.test(p.type)) return { name, type: callback, passed: given };
 
-  return { name, type: tsTypeOf(api, p.type, config.types), passed: name };
+  return { name, type: tsTypeOf(api, p.type, config.types), passed: given };
 };
 
-/** A signature's result type: its converter's, a promise of it when async */
+/** A signature's parameters as declared and as passed on: those a record `takes` given as one object of it, in the
+ * place of its first */
+const paramsOf = (
+  api: Api,
+  config: Config,
+  sig: { name: string; api: Declared['api']; params: Signature['params'] },
+  callback?: string,
+): { declared: string[]; passed: string[] } => {
+  const groups = taken(api, sig);
+  const declared: string[] = [];
+  const passed: string[] = [];
+  const placed = new Set<string>();
+
+  for (const p of sig.params) {
+    const group = groups.find((g) => g.fields.includes(p.name));
+    const one = param(api, config, sig, p, callback, group && `${group.name}.${camel(p.name)}`);
+
+    if (!group) declared.push(`${one.name}: ${one.type}`);
+    else if (!placed.has(group.name)) {
+      placed.add(group.name);
+      declared.push(`${group.name}: ${group.record}`);
+    }
+    passed.push(one.passed);
+  }
+
+  return { declared, passed };
+};
+
+/** A signature's result type: its converter's, the record it returns checked, a promise of it when async */
 const result = (api: Api, config: Config, sig: Signature): { type: string; wrap: (call: string) => string } => {
   const convert = typeof sig.api.result === 'string' ? sig.api.result : undefined;
+  const record = returned(api, sig);
+
+  if (convert && record) throw new Error(`wasm-facade: ${sig.name} has both result and returns`);
+
   const plain = sig.returns === null ? 'void' : tsTypeOf(api, sig.returns, config.types);
-  const type = convert ? `ReturnType<typeof convert.${convert}>` : plain;
+  const type = convert ? `ReturnType<typeof convert.${convert}>` : (record ?? plain);
+  const through = convert ? `convert.${convert}` : record && checkedName(record);
 
-  if (sig.async)
-    return { type: `Promise<${type}>`, wrap: (call) => (convert ? `${call}.then(convert.${convert})` : call) };
+  if (sig.async) return { type: `Promise<${type}>`, wrap: (call) => (through ? `${call}.then(${through})` : call) };
 
-  return { type, wrap: (call) => (convert ? `convert.${convert}(${call})` : call) };
+  return { type, wrap: (call) => (through ? `${through}(${call})` : call) };
 };
+
+/** The checker of a record returned by the wasm module */
+const checkedName = (record: string): string => `checked${record}`;
 
 const unionCode = (u: Union): string[] => [
   tsDoc(u.doc),
@@ -115,115 +160,293 @@ const functionCode = (api: Api, config: Config, f: Declared): string[] => {
     flags: f.flags ?? [],
     api: f.api,
   };
-  const params = sig.params.map((p) => param(api, config, f, p));
+  const params = paramsOf(api, config, sig);
   const out = result(api, config, sig);
 
   return [
     tsDoc(f.doc),
-    `export const ${camel(sig.export)} = (${params.map((p) => `${p.name}: ${p.type}`).join(', ')}): ${out.type} =>`,
-    `  ${out.wrap(`wasm.${sig.export}(${params.map((p) => p.passed).join(', ')})`)};`,
+    `export const ${camel(sig.export)} = (${params.declared.join(', ')}): ${out.type} =>`,
+    `  ${out.wrap(`wasm.${sig.export}(${params.passed.join(', ')})`)};`,
     '',
   ];
 };
 
+/** A TypeScript type whose values the facade keeps as they are (no copy): a primitive, a union's strings */
+const primitive = (api: Api, type: string): boolean =>
+  type
+    .split(' | ')
+    .every(
+      (t) =>
+        ['number', 'string', 'boolean', 'bigint', 'undefined'].includes(t) ||
+        /^'[^']*'$/.test(t) ||
+        unions(api).some((u) => u.name === t),
+    );
+
+/** A value kept or handed out by the facade, as it writes it: through `kept` unless a primitive */
+const keptValue = (api: Api, type: string, value: string): string => (primitive(api, type) ? value : `kept(${value})`);
+
+/** The payload of an event a class's setters emit: `{ <field>: value }` each, `{ key, name, value }` by key */
+const emittedPayload = (api: Api, config: Config, c: Class, event: string): string =>
+  [
+    ...c.kept
+      .filter((k) => k.setter && k.emits === event)
+      .map((k) => `{ ${k.name}: ${tsTypeOf(api, k.rust, config.types)} }`),
+    ...c.keyed
+      .filter((k) => k.emits === event)
+      .map(
+        (k) =>
+          `{ [N in keyof ${k.struct}]: { key: ${tsTypeOf(api, k.key, config.types)}; name: N; value: ${k.struct}[N] } }[keyof ${k.struct}]`,
+      ),
+  ].join(' | ');
+
+/** A class's properties by key: each key's held by the facade, set (kept, the call made, emitted) and read back */
+const keyedCode = (api: Api, config: Config, k: Keyed, events: string): string[] => {
+  const store = `#${lowerFirst(k.struct)}`;
+  const key = tsTypeOf(api, k.key, config.types);
+  const held = k.defaults ? k.struct : `Partial<${k.struct}>`;
+  const base = k.defaults ? `default${k.struct}` : '{}';
+  const [keyName, nameName, valueName] = k.method.params.map((p) => camel(p.name));
+  const keyUnion = unions(api).find((u) => u.name === k.key.replace(/^&/, ''));
+  const keyPassed = keyUnion ? `${unionValues(keyUnion)}[${keyName}]` : keyName;
+
+  return [
+    '',
+    tsDoc(k.method.doc, '  '),
+    `  ${camel(k.method.export)}<N extends keyof ${k.struct}>(${keyName}: ${key}, ${nameName}: N, ${valueName}: ${k.struct}[N]): this {`,
+    `    this.${store}.set(${keyName}, Object.freeze({ ...(this.${store}.get(${keyName}) ?? ${base}), [${nameName}]: kept(${valueName}) }) as ${held});`,
+    `    this.#inner.${k.method.export}(${keyPassed}, ${nameName}, ${valueName});`,
+    ...(k.emits
+      ? [
+          `    this.#emit('${k.emits}', { ${[
+            ['key', keyName],
+            ['name', nameName],
+            ['value', valueName],
+          ]
+            .map(([field, given]) => (field === given ? field : `${field}: ${given}`))
+            .join(', ')} } as ${events}['${k.emits}']);`,
+        ]
+      : []),
+    '',
+    '    return this;',
+    '  }',
+    '',
+    `  /** The property \`${nameName}\` of \`${keyName}\`, as last set${k.defaults ? ' (its default else)' : ''} */`,
+    `  ${k.getter}<N extends keyof ${k.struct}>(${keyName}: ${key}, ${nameName}: N): ${k.struct}[N]${k.defaults ? '' : ' | undefined'} {`,
+    `    return kept((this.${store}.get(${keyName}) ?? ${base})[${nameName}]);`,
+    '  }',
+  ];
+};
+
+/** A property's getter or setter: an accessor (`get radius()`, `set radius(value)`) or a method (`getRadius()`,
+ * `setRadius(value)`), as the configuration's `accessors` says */
+const accessorCode = (
+  accessors: Config['accessors'],
+  kind: 'get' | 'set',
+  name: string,
+  type: string,
+  body: string[],
+): string[] => {
+  const names = accessorNames(name, accessors);
+  const heads = {
+    methods: { get: `  ${names.getter}(): ${type} {`, set: `  ${names.setter}(value: ${type}): void {` },
+    properties: { get: `  get ${name}(): ${type} {`, set: `  set ${name}(value: ${type}) {` },
+  };
+  const head = heads[accessors][kind];
+
+  return [head, ...body.map((line) => `    ${line}`), '  }'];
+};
+
 const classCode = (api: Api, config: Config, c: Class): string[] => {
   const ctor = c.ctor;
+  const own = c.options;
+  const events = eventsName(c);
+  const accessors = config.accessors ?? 'properties';
+  const typeOf = (rust: string) => tsTypeOf(api, rust, config.types);
+  const clashes = accessorClashes(c, accessors);
+
+  if (clashes.length)
+    throw new Error(
+      `wasm-facade: ${c.name}: ${clashes.join(', ')} both an accessor (accessors = "methods") and a method`,
+    );
+
+  // The constructor's parameters: an option's from the copy kept, a dependency's as given
   const ctorArgs = ctor
     ? ctor.params.map((p) => {
-        const field = c.options?.fields.find((f) => f.name === camel(p.name));
-        const value =
-          field && c.options ? `options.${field.name} ?? ${defaultsName(c.options)}.${field.name}` : camel(p.name);
+        const field = own?.fields.find((f) => f.name === camel(p.name));
+        const dep = c.deps.find((d) => d.name === camel(p.name));
+        // Each parameter is an option or a dependency (`classes` refuses any other)
+        const value = field ? `this.#options.${field.name}` : `this.${dep?.name}`;
         const union = unions(api).find((u) => u.name === p.type);
 
         return union ? `${unionValues(union)}[${value}]` : value;
       })
     : [];
-  const construct = c.options
+  const depsGiven = c.deps.map((d) => `${d.name}: ${d.type}`);
+  const depsKept = c.deps.map((d) => `    this.${d.name} = ${d.name};`);
+  const construct = own
     ? [
-        `  constructor(options: ${initName(c.options)} = {}) {`,
+        `  constructor(${[...depsGiven, `options: ${initName(own)} = {}`].join(', ')}) {`,
+        ...depsKept,
+        '    this.#options = Object.freeze({',
+        ...own.fields.map(
+          (f) =>
+            `      ${f.name}: ${keptValue(api, typeOf(f.rust), `options.${f.name} ?? ${defaultsName(own)}.${f.name}`)},`,
+        ),
+        '    });',
         `    this.#inner = new wasm.${c.name}(${ctorArgs.join(', ')});`,
         '  }',
       ]
-    : ['  constructor() {', `    this.#inner = new wasm.${c.name}();`, '  }'];
-  const properties = c.properties.flatMap((p) => {
-    const type = p.getter.returns ? tsTypeOf(api, p.getter.returns, config.types) : 'unknown';
+    : [
+        `  constructor(${depsGiven.join(', ')}) {`,
+        ...depsKept,
+        `    this.#inner = new wasm.${c.name}(${ctorArgs.join(', ')});`,
+        '  }',
+      ];
+  // The options kept: each read from the copy; its setter keeps the value, makes the call, emits
+  const kept = c.kept.flatMap((k) => {
+    const type = typeOf(k.rust);
+    const union = unions(api).find((u) => u.name === k.rust);
+    const passed = union ? `${unionValues(union)}[value]` : 'value';
 
     return [
       '',
-      tsDoc(p.getter.doc, '  '),
-      `  get ${p.name}(): ${type} {`,
-      `    return this.#inner.${p.name};`,
-      '  }',
-      ...(p.setter
+      tsDoc(k.doc, '  '),
+      ...accessorCode(accessors, 'get', k.name, type, [`return ${keptValue(api, type, `this.#options.${k.name}`)};`]),
+      ...(k.setter
         ? [
             '',
-            tsDoc(p.setter.doc || p.getter.doc, '  '),
-            `  set ${p.name}(value: ${type}) {`,
-            `    this.#inner.${p.name} = value;`,
-            '  }',
+            tsDoc(k.setter.doc || k.doc, '  '),
+            ...accessorCode(accessors, 'set', k.name, type, [
+              `this.#options = Object.freeze({ ...this.#options, ${k.name}: ${keptValue(api, type, 'value')} });`,
+              `this.#inner.${k.name} = ${passed};`,
+              ...(k.emits ? [`this.#emit('${k.emits}', { ${k.name}: value });`] : []),
+            ]),
           ]
         : []),
     ];
   });
+  const properties = c.properties
+    .filter((p) => !c.kept.some((k) => k.name === p.name))
+    .flatMap((p) => {
+      const type = p.getter.returns ? typeOf(p.getter.returns) : 'unknown';
+
+      return [
+        '',
+        tsDoc(p.getter.doc, '  '),
+        ...accessorCode(accessors, 'get', p.name, type, [`return this.#inner.${p.name};`]),
+        ...(p.setter
+          ? [
+              '',
+              tsDoc(p.setter.doc || p.getter.doc, '  '),
+              ...accessorCode(accessors, 'set', p.name, type, [`this.#inner.${p.name} = value;`]),
+            ]
+          : []),
+      ];
+    });
   const methods = c.methods.flatMap((m) => {
-    const params = m.params.map((p) =>
-      param(api, config, m, p, typeof m.api.callback === 'string' ? m.api.callback : undefined),
-    );
+    const params = paramsOf(api, config, m, typeof m.api.callback === 'string' ? m.api.callback : undefined);
     const out = result(api, config, m);
-    const call = `this.#inner.${m.export}(${params.map((p) => p.passed).join(', ')})`;
+    const call = `this.#inner.${m.export}(${params.passed.join(', ')})`;
 
     return [
       '',
       tsDoc(m.doc, '  '),
-      `  ${camel(m.export)}(${params.map((p) => `${p.name}: ${p.type}`).join(', ')}): ${out.type} {`,
+      `  ${camel(m.export)}(${params.declared.join(', ')}): ${out.type} {`,
       out.type === 'void' ? `    ${call};` : `    return ${out.wrap(call)};`,
       '  }',
     ];
   });
-  const events = c.events.length
-    ? [
-        '',
-        `  /** Calls \`listener\` at each event \`type\`; returns what stops it */`,
-        `  on<K extends keyof ${eventsName(c)}>(type: K, listener: (payload: ${eventsName(c)}[K]) => void): () => void {`,
-        '    let live = true;',
-        `    const relay = (payload: ${eventsName(c)}[K]) => {`,
-        '      if (live) listener(payload);',
-        '    };',
-        '',
-        '    switch (type) {',
-        ...c.events.flatMap((e) => [
-          `      case '${e.name}':`,
-          `        this.#inner.${e.method.export}(relay);`,
-          '        break;',
+  const emitting = c.emitted.length > 0;
+  const relayed = [
+    '    switch (type) {',
+    ...c.events.flatMap((e) => [
+      `      case '${e.name}':`,
+      `        this.#inner.${e.method.export}(relay);`,
+      '        break;',
+    ]),
+    ...(emitting
+      ? [
+          '      default:',
+          `        this.#listeners.set(type, (this.#listeners.get(type) ?? new Set()).add(relay as (payload: never) => void));`,
+        ]
+      : []),
+    '    }',
+  ];
+  const listening = [
+    '',
+    `  /** Calls \`listener\` at each event \`type\`; returns what stops it */`,
+    `  on<K extends keyof ${events}>(type: K, listener: (payload: ${events}[K]) => void): () => void {`,
+    '    let live = true;',
+    `    const relay = (payload: ${events}[K]) => {`,
+    '      if (live) listener(payload);',
+    '    };',
+    '',
+    ...(c.events.length
+      ? relayed
+      : [
+          `    this.#listeners.set(type, (this.#listeners.get(type) ?? new Set()).add(relay as (payload: never) => void));`,
         ]),
-        '    }',
-        '',
-        '    return () => {',
-        '      live = false;',
-        '    };',
-        '  }',
-      ]
-    : [];
+    '',
+    '    return () => {',
+    '      live = false;',
+    ...(emitting ? ['      this.#listeners.get(type)?.delete(relay as (payload: never) => void);'] : []),
+    '    };',
+    '  }',
+    ...(emitting
+      ? [
+          '',
+          '  /** Calls the listeners of an event its setters emit; one that throws is reported, the others still called */',
+          `  #emit<K extends keyof ${events}>(type: K, payload: ${events}[K]): void {`,
+          '    for (const listener of [...(this.#listeners.get(type) ?? [])]) {',
+          '      try {',
+          `        (listener as (payload: ${events}[K]) => void)(payload);`,
+          '      } catch (error) {',
+          '        queueMicrotask(() => {',
+          '          throw error;',
+          '        });',
+          '      }',
+          '    }',
+          '  }',
+        ]
+      : []),
+  ];
+  const hasEvents = c.events.length > 0 || emitting;
 
   return [
-    ...(c.events.length
+    ...(hasEvents
       ? [
           `/** The events of ${c.name} and their payloads */`,
-          `export interface ${eventsName(c)} {`,
+          `export interface ${events} {`,
           ...c.events.flatMap((e) => [tsDoc(e.method.doc, '  '), `  ${e.name}: ${e.payload};`]),
+          ...c.emitted.flatMap((name) => [
+            `  /** A property changed by its setter, once kept and applied */`,
+            `  ${name}: ${emittedPayload(api, config, c, name)};`,
+          ]),
           '}',
           '',
         ]
       : []),
     tsDoc(c.doc),
     `export class ${c.name} {`,
+    ...c.deps.flatMap((d) => [
+      `  /** A dependency, given to the constructor: the generated code's and its subclasses' */`,
+      `  protected readonly ${d.name}: ${d.type};`,
+    ]),
     `  readonly #inner: wasm.${c.name};`,
+    ...(own ? [`  #options: Readonly<${own.name}>;`] : []),
+    ...c.keyed.map(
+      (k) =>
+        `  readonly #${lowerFirst(k.struct)} = new Map<${typeOf(k.key)}, ${k.defaults ? k.struct : `Partial<${k.struct}>`}>();`,
+    ),
+    ...(emitting ? [`  readonly #listeners = new Map<keyof ${events}, Set<(payload: never) => void>>();`] : []),
     '',
     ...(ctor ? [tsDoc(ctor.doc, '  ')] : []),
     ...construct,
+    ...kept,
     ...properties,
+    ...c.keyed.flatMap((k) => keyedCode(api, config, k, events)),
     ...methods,
-    ...events,
+    ...(hasEvents ? listening : []),
     '',
     '  /** Frees its memory in the wasm module: it is not to be used after */',
     '  free(): void {',
@@ -263,6 +486,111 @@ const recordCode = (api: Api, config: Config, r: ApiRecord): string[] => {
     `export interface ${r.name} {`,
     ...r.fields.flatMap((f) => [tsDoc(f.doc, '  '), `  readonly ${f.name}${f.optional ? '?' : ''}: ${type(f)};`]),
     '}',
+    '',
+  ];
+};
+
+/** What the facade keeps and hands out: arrays and plain objects copied and frozen, typed arrays copied */
+const keptCode = [
+  '/** A value as the facade keeps it and hands it out: arrays and plain objects copied and frozen, typed arrays copied',
+  ' * (they cannot be frozen): what a caller holds never changes what the facade keeps */',
+  'const kept = <T>(value: T): T => {',
+  '  if (ArrayBuffer.isView(value) && !(value instanceof DataView)) return (value as unknown as { slice(): T }).slice();',
+  '  if (Array.isArray(value)) return Object.freeze(value.map(kept)) as T;',
+  "  if (value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)",
+  '    return Object.freeze(Object.fromEntries(Object.entries(value).map(([k, v]) => [k, kept(v)]))) as T;',
+  '',
+  '  return value;',
+  '};',
+  '',
+];
+
+/** What a record returned by the wasm module is checked against: a TypeError naming the field */
+const mismatchCode = [
+  '/** A value the wasm module returned that is not as declared: a TypeError naming where */',
+  'const mismatch = (at: string, expected: string, value: unknown): never => {',
+  "  const found = Array.isArray(value) ? 'an array' : typeof value;",
+  '',
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: the generated code's template
+  "  throw new TypeError(`wasm-facade: ${at} is ${value === null ? 'null' : found}, ${expected} expected`);",
+  '};',
+  '',
+];
+
+/** The records a record names in its fields, it included, those of its fields' fields too */
+const recordsIn = (api: Api, name: string, seen = new Set<string>()): Set<string> => {
+  if (seen.has(name) || !records(api).some((r) => r.name === name)) return seen;
+  seen.add(name);
+  for (const f of structOf(api, name).fields ?? [])
+    recordsIn(api, f.type.replace(/^Option<(.*)>$/, '$1').replace(/^Box<(.*)>$/, '$1'), seen);
+
+  return seen;
+};
+
+/** The statement checking a value `value` of a Rust type (an `Option` one when given), `at` its place's expression;
+ * none for a type not checked (`ts`, the project's own, `JsValue`) */
+const checkOf = (api: Api, config: Config, rust: string, value: string, at: string): string | undefined => {
+  const option = /^Option<(.*)>$/.exec(rust)?.[1];
+  const ty = option ?? rust;
+
+  if (config.types[ty]) return undefined;
+
+  const guard = (test: string, expected: string) =>
+    `if (${option ? `${value} !== undefined && ` : ''}${test}) mismatch(${at}, ${JSON.stringify(expected)}, ${value});`;
+  const typed = tsTypeOf(api, ty);
+
+  if (records(api).some((r) => r.name === ty))
+    return `${option ? `if (${value} !== undefined) ` : ''}${checkedName(ty)}(${value}, ${at});`;
+  if (/Array$/.test(typed)) return guard(`!(${value} instanceof ${typed})`, typed);
+  if (typed === 'string[]')
+    return guard(`!(Array.isArray(${value}) && ${value}.every((s) => typeof s === 'string'))`, 'string[]');
+  if (['number', 'bigint', 'boolean', 'string'].includes(typed)) return guard(`typeof ${value} !== '${typed}'`, typed);
+
+  const union = unions(api).find((u) => u.name === ty);
+
+  if (union)
+    return guard(
+      `!(${union.values.map((v) => `${value} === '${v.value}'`).join(' || ')})`,
+      union.values.map((v) => `'${v.value}'`).join(' | '),
+    );
+
+  return undefined;
+};
+
+/** A record's checker: what the wasm module returned, checked field by field, typed as the record */
+const checkerCode = (api: Api, config: Config, r: ApiRecord): string[] => {
+  const struct = structOf(api, r.name).fields ?? [];
+  const access = (i: number) => (r.tuple ? `v[${i}]` : `v.${r.fields[i]?.name}`);
+  const place = (i: number) => `\`\${at}${r.tuple ? `[${i}]` : `.${r.fields[i]?.name}`}\``;
+  const checks = r.fields
+    .map((f, i) => (f.ts ? undefined : checkOf(api, config, struct[i]?.type ?? f.rust, access(i), place(i))))
+    .filter((c): c is string => c !== undefined);
+  const shape = r.tuple
+    ? `  const v = Array.isArray(value) && value.length === ${r.fields.length} ? (value as unknown[]) : mismatch(at, 'a tuple of ${r.fields.length}', value);`
+    : "  const v = value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : mismatch(at, 'an object', value);";
+
+  return [
+    `/** A ${r.name} as the wasm module returns it, checked: a TypeError naming the field that is not */`,
+    `export const ${checkedName(r.name)} = (value: unknown, at = '${r.name}'): ${r.name} => {`,
+    shape,
+    '',
+    ...checks.map((c) => `  ${c}`),
+    '',
+    `  return value as ${r.name};`,
+    '};',
+    '',
+  ];
+};
+
+/** The buffers of a record of typed arrays, to transfer it (`postMessage(value, buffers)`) */
+const buffersCode = (r: ApiRecord): string[] => {
+  const name = lowerFirst(r.name);
+
+  return [
+    `/** The buffers of a ${r.name}, to transfer it: \`postMessage(${name}, ${name}Buffers(${name}))\` */`,
+    `export const ${name}Buffers = (${name}: ${r.name}): ArrayBuffer[] => [`,
+    `  ...new Set([${r.fields.map((f) => `${name}.${f.name}${f.optional ? '?' : ''}.buffer`).join(', ')}]),`,
+    '].filter((buffer): buffer is ArrayBuffer => buffer instanceof ArrayBuffer);',
     '',
   ];
 };
@@ -332,9 +660,42 @@ const hostCode = (api: Api, config: Config, h: Host): string[] => {
 /** The facade's text */
 export const facade = (api: Api, config: Config, out: string): string => {
   const wasm = config.wasm ?? './pkg/index.js';
-  const usesConverters = [...functions(api), ...classes(api).flatMap((c) => c.methods)].some(
+  const signatures = [...functions(api), ...classes(api).flatMap((c) => c.methods)];
+  const usesConverters = signatures.some(
     (s) => Object.keys(converters(s)).length > 0 || typeof s.api.result === 'string',
   );
+  const keeps = classes(api).some(
+    (c) => c.keyed.length > 0 || c.kept.some((k) => !primitive(api, tsTypeOf(api, k.rust, config.types))),
+  );
+  const checked = new Set(signatures.flatMap((s) => [...recordsIn(api, returned(api, s) ?? '')]));
+  // The records of typed arrays taken as parameters: their buffers listed, to transfer them
+  const transferred = new Set(
+    signatures.flatMap((s) => taken(api, { ...s, params: s.params ?? [] }).map((t) => t.record)),
+  );
+  const buffered = records(api)
+    .filter(
+      (r) =>
+        transferred.has(r.name) &&
+        r.fields.every((f) =>
+          /Array$/.test(f.ts ?? tsTypeOf(api, f.rust.replace(/^Option<(.*)>$/, '$1'), config.types)),
+        ),
+    )
+    .map((r) => r.name);
+
+  const body = joined([
+    ...(keeps ? keptCode : []),
+    ...(checked.size ? mismatchCode : []),
+    ...unions(api).flatMap(unionCode),
+    ...options(api).flatMap((o) => optionsCode(api, config, o)),
+    ...functions(api).flatMap((f) => functionCode(api, config, f)),
+    ...classes(api).flatMap((c) => classCode(api, config, c)),
+    ...records(api).flatMap((r) => [
+      ...recordCode(api, config, r),
+      ...(checked.has(r.name) ? checkerCode(api, config, r) : []),
+      ...(buffered.includes(r.name) ? buffersCode(r) : []),
+    ]),
+    ...hosts(api).flatMap((h) => hostCode(api, config, h)),
+  ]);
 
   return joined([
     `// ${HEADER_OF('typescript')}`,
@@ -342,14 +703,10 @@ export const facade = (api: Api, config: Config, out: string): string => {
     ...(usesConverters && config.converters
       ? [`import * as convert from '${specifier(out, config.converters)}';`]
       : []),
+    ...typeImports(config, out, body),
     `import * as wasm from '${wasm}';`,
     '',
-    ...unions(api).flatMap(unionCode),
-    ...options(api).flatMap((o) => optionsCode(api, config, o)),
-    ...functions(api).flatMap((f) => functionCode(api, config, f)),
-    ...classes(api).flatMap((c) => classCode(api, config, c)),
-    ...records(api).flatMap((r) => recordCode(api, config, r)),
-    ...hosts(api).flatMap((h) => hostCode(api, config, h)),
+    body,
   ]);
 };
 

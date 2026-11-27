@@ -30,7 +30,8 @@ fn the_example_repository_reads_as_its_api_json() {
             .map(|i| i["kind"].as_str().unwrap())
             .collect::<Vec<_>>(),
         [
-            "class", "struct", "enum", "enum", "host", "struct", "struct", "function"
+            "class", "struct", "enum", "enum", "class", "struct", "struct", "enum", "host",
+            "struct", "struct", "struct", "function", "function", "function"
         ]
     );
 }

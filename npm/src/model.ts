@@ -45,6 +45,8 @@ export interface Declared {
   /** An enum's variants: their keys and fields (an event's payload) where they have some */
   variants?: { name: string; doc: string; api?: Attributes; fields?: Field[] }[];
   methods?: Signature[];
+  /** A class's dependencies (`deps = "map: GeoMap, …"`), in their order: a name and its TypeScript type each */
+  deps?: { name: string; type: string }[];
   /** A function's */
   export?: string;
   params?: Param[];

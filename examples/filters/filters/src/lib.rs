@@ -15,8 +15,8 @@ pub enum Edge {
     Wrap,
 }
 
-/// A blur's options
-#[cfg_attr(wasm_facade, api(options))]
+/// A blur's options: kept by the facade, each a property of the blur, its setter emitting `change`
+#[cfg_attr(wasm_facade, api(options, emits = "change"))]
 pub struct BlurOptions {
     /// Its radius, pixels
     #[cfg_attr(wasm_facade, api(default = "2"))]
@@ -58,6 +58,18 @@ impl Blur {
     #[wasm_bindgen(setter)]
     pub fn set_radius(&mut self, radius: f64) {
         self.radius = radius;
+    }
+
+    /// How it reads past the edges
+    #[wasm_bindgen(getter)]
+    pub fn edge(&self) -> Edge {
+        self.edge
+    }
+
+    /// Changes how it reads past the edges
+    #[wasm_bindgen(setter)]
+    pub fn set_edge(&mut self, edge: Edge) {
+        self.edge = edge;
     }
 
     /// Blurs an image in place
@@ -172,6 +184,181 @@ impl Blur {
     }
 }
 
+/// A channel of an RGBA image
+#[cfg_attr(wasm_facade, api(union))]
+#[wasm_bindgen]
+#[derive(Clone, Copy)]
+pub enum Channel {
+    /// Red
+    Red,
+    /// Green
+    Green,
+    /// Blue
+    Blue,
+    /// Opacity
+    Alpha,
+}
+
+/// A channel's levels: its input range stretched to the whole, then its gamma; the facade keeps them by channel and
+/// its setter emits `change`
+#[cfg_attr(wasm_facade, api(options, emits = "change"))]
+#[derive(Clone, Copy)]
+pub struct Levels {
+    /// The input's black point, 0 to 255
+    #[cfg_attr(wasm_facade, api(default = "0"))]
+    pub black: f64,
+    /// The input's white point, 0 to 255
+    #[cfg_attr(wasm_facade, api(default = "255"))]
+    pub white: f64,
+    /// The gamma applied once stretched (1 leaves the midtones)
+    #[cfg_attr(wasm_facade, api(default = "1"))]
+    pub gamma: f64,
+}
+
+impl Default for Levels {
+    fn default() -> Self {
+        Levels {
+            black: 0.0,
+            white: 255.0,
+            gamma: 1.0,
+        }
+    }
+}
+
+/// A grade: levels per channel, applied to RGBA pixels in place
+#[wasm_bindgen]
+#[derive(Default)]
+pub struct Grade {
+    levels: [Levels; 4],
+}
+
+/// A grade: levels per channel, applied to RGBA pixels in place
+#[cfg_attr(wasm_facade, api(class))]
+#[wasm_bindgen]
+impl Grade {
+    /// A grade leaving every channel as it is
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Grade {
+        Grade::default()
+    }
+
+    /// Sets one of a channel's levels
+    #[wasm_bindgen(js_name = setLevelsProperty)]
+    #[cfg_attr(wasm_facade, api(keyed = "Levels"))]
+    pub fn set_levels_property(
+        &mut self,
+        channel: Channel,
+        name: &str,
+        value: f64,
+    ) -> Result<(), String> {
+        let levels = &mut self.levels[channel as usize];
+
+        match name {
+            "black" => levels.black = value,
+            "white" => levels.white = value,
+            "gamma" => levels.gamma = value,
+            _ => return Err(format!("no level {name}")),
+        }
+        Ok(())
+    }
+
+    /// Grades an image in place
+    #[cfg_attr(wasm_facade, api(convert = "image=pixels"))]
+    pub fn apply(&self, image: &mut [u8]) {
+        image.as_chunks_mut::<4>().0.iter_mut().for_each(|p| {
+            (0..4).for_each(|c| p[c] = self.levels[c].map(p[c]));
+        });
+    }
+}
+
+impl Levels {
+    /// A value through these levels
+    fn map(&self, value: u8) -> u8 {
+        let range = (self.white - self.black).max(1.0);
+        let t = ((f64::from(value) - self.black) / range).clamp(0.0, 1.0);
+
+        (t.powf(1.0 / self.gamma.max(0.01)) * 255.0).round() as u8
+    }
+}
+
+/// An image's planes, one byte per pixel each: what `interleave` takes as one object
+#[cfg(wasm_facade)]
+#[api(record)]
+pub struct Planes {
+    /// The red bytes
+    pub red: Vec<u8>,
+    /// The green bytes
+    pub green: Vec<u8>,
+    /// The blue bytes
+    pub blue: Vec<u8>,
+    /// The opacity's bytes
+    pub alpha: Vec<u8>,
+}
+
+/// Planes interleaved as RGBA pixels, as long as the shortest
+#[cfg_attr(wasm_facade, api(function, takes = "Planes"))]
+#[wasm_bindgen]
+pub fn interleave(red: &[u8], green: &[u8], blue: &[u8], alpha: &[u8]) -> Vec<u8> {
+    let len = red.len().min(green.len()).min(blue.len()).min(alpha.len());
+
+    (0..len)
+        .flat_map(|i| [red[i], green[i], blue[i], alpha[i]])
+        .collect()
+}
+
+/// An image's luminance at a glance
+#[cfg(wasm_facade)]
+#[api(record)]
+pub struct Stats {
+    /// Its pixels
+    pub pixels: u32,
+    /// Its mean, 0 to 255
+    pub mean: f64,
+    /// Its darkest and its lightest, if it has pixels
+    pub range: Option<Size>,
+}
+
+/// An image's luminance at a glance: a JS object the facade checks as a `Stats`
+#[cfg_attr(
+    wasm_facade,
+    api(function, convert = "image=pixels", returns = "Stats")
+)]
+#[wasm_bindgen]
+pub fn stats(image: &[u8]) -> JsValue {
+    let counts = histogram(image);
+    let pixels: u32 = counts.iter().sum();
+    let total: u64 = counts
+        .iter()
+        .enumerate()
+        .map(|(l, &n)| l as u64 * u64::from(n))
+        .sum();
+    let stats = js_sys::Object::new();
+    let set = |key: &str, value: JsValue| {
+        let _ = js_sys::Reflect::set(&stats, &JsValue::from_str(key), &value);
+    };
+
+    set("pixels", pixels.into());
+    set(
+        "mean",
+        (if pixels == 0 {
+            0.0
+        } else {
+            total as f64 / f64::from(pixels)
+        })
+        .into(),
+    );
+    if pixels > 0 {
+        let darkest = counts.iter().position(|&n| n > 0).unwrap_or(0) as u32;
+        let lightest = counts.iter().rposition(|&n| n > 0).unwrap_or(0) as u32;
+
+        set(
+            "range",
+            js_sys::Array::of2(&darkest.into(), &lightest.into()).into(),
+        );
+    }
+    stats.into()
+}
+
 // A class written by hand in TypeScript (`src/preview.ts`), its methods declared here once for every binding; the
 // trait is never compiled
 /// A blur's preview: an image on a canvas, blurred as it is shown
@@ -277,6 +464,34 @@ mod tests {
 
         Blur::new(0.0, Edge::Clamp).apply(&mut image, 3, 1);
         assert_eq!(reds(&image), [7, 200, 13]);
+    }
+
+    #[test]
+    fn a_grade_stretches_and_bends_each_channel_by_its_levels() {
+        let mut grade = Grade::new();
+        let mut image = vec![100, 100, 100, 255];
+
+        grade
+            .set_levels_property(Channel::Red, "black", 100.0)
+            .unwrap();
+        grade
+            .set_levels_property(Channel::Green, "white", 200.0)
+            .unwrap();
+        grade
+            .set_levels_property(Channel::Blue, "gamma", 2.0)
+            .unwrap();
+        grade.apply(&mut image);
+        // Red's black at 100: 0; green's 100 of 200: half; blue's gamma 2: the square root of 100/255
+        assert_eq!(image, [0, 128, 160, 255]);
+        assert_eq!(
+            grade.set_levels_property(Channel::Red, "hue", 1.0),
+            Err("no level hue".into())
+        );
+    }
+
+    #[test]
+    fn planes_interleave_as_pixels_as_long_as_the_shortest() {
+        assert_eq!(interleave(&[1, 2], &[3, 4], &[5, 6], &[7]), [1, 3, 5, 7]);
     }
 
     #[test]

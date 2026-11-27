@@ -19,9 +19,41 @@
   `emit`; Python an `on`, React Native `<HOST>_EVENTS`, the web component the DOM names (`EVENTS`, `prefix`), the
   references their lists. The extractor reads a variant's keys and fields.
 
+- Options kept by the facade: a class with `options = "<struct>"` keeps a copy of them; each option is a property
+  read from that copy, never from the wasm module (objects and arrays frozen, typed arrays copied), its wasm-bindgen
+  setter keeping the value then making the call. The other targets list them as properties.
+- Change events: `emits = "<event>"` on an options struct or a field makes the class's setter emit `{ <field>: value }`
+  once the value is kept and the call made (`<Class>Events`, `on`); the `settings` pattern reads it too (`emits`), for
+  plugins.
+- Properties by key: a method `(key, name, value)` with `keyed = "<struct>"` (options, their defaults, or a record)
+  is `setXProperty(key, name, value)` and `getXProperty(key, name)` over each key's properties held by the facade;
+  with `emits`, `{ key, name, value }`.
+- Records taken: `takes = "<record>, …"` on a function or a method takes the parameters named as a record's fields as
+  one object of it (Python a dict), a record of typed arrays its buffers listed to transfer it (`<record>Buffers`).
+- Records returned: `returns = "<record>"` on a function or a method returning a `JsValue` types its result as that
+  record and checks it (`checked<Record>`: a `TypeError` naming the field not as declared).
+- Accessors as methods: `accessors = "methods"` in `wasm-facade.toml` (default `"properties"`) writes each property of
+  a class as `getRadius()` / `setRadius(value)` in place of `get radius()` / `set radius(value)`, with the same
+  behaviour (the copy kept, the call made, the event emitted); React Native lists them among the methods, the
+  reference names them, Python keeps properties and calls the facade's names (`_call("setRadius", value)`). A member
+  already named as an accessor would be is an error.
+- Dependencies: `deps = "map: GeoMap, engine: Engine"` on a class's `impl` block, read by the extractor into the
+  class's `deps` in `api.json` (schema 1 still: a reader ignoring it reads the rest; a text not `name: Type, …` an
+  error). The facade's constructor takes them first, typed and required (`new Layer(map, engine, options)`), kept in
+  `protected readonly` fields for the generated code and the hand-written subclasses; a wasm constructor's parameter
+  named as one is given it. `[imports]` in `wasm-facade.toml` names each type's module (`GeoMap = "src/map.ts"`, a
+  package as written), imported as a type where the generated code names it. React's hooks take them first; the
+  references list them.
+
+### Changed
+
+- A class with `options` reads its options' properties from the facade's copy, no longer from the wasm module.
+
 ### Fixed
 
 - `kebab` of a capitalized name has no leading dash (`Preview`: `preview`).
+- A wasm constructor's parameter that is neither an option of the class nor a dependency stops the generation with an
+  error naming the class and the parameter, no longer passed on as an undefined name (or left out without options).
 
 ## [0.2.1] - 2026-11-26
 
