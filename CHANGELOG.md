@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-28
+
 ### Added
 
 - Hosts (#7): a trait with `api(host = "<class>")`, usually never compiled (`#[cfg(<cfg>)]`, its attributes bare),
@@ -54,6 +56,7 @@
 - `kebab` of a capitalized name has no leading dash (`Preview`: `preview`).
 - A wasm constructor's parameter that is neither an option of the class nor a dependency stops the generation with an
   error naming the class and the parameter, no longer passed on as an undefined name (or left out without options).
+- An `[imports]` type name is escaped whole in the pattern that looks for it in the generated code.
 
 ## [0.2.1] - 2026-11-26
 

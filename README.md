@@ -27,7 +27,7 @@ anyone maintaining it by hand.
 ## Install
 
 ```sh
-npm install -D wasm-facade@0.2.1   # `npx wasm-facade generate` (or bun, pnpm, yarn)
+npm install -D wasm-facade@0.3.0   # `npx wasm-facade generate` (or bun, pnpm, yarn)
 ```
 
 The generator runs on Node 20+ and on Bun. The package brings the extractor of its own version: prebuilt for macOS,

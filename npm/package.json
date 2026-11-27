@@ -1,6 +1,6 @@
 {
   "name": "wasm-facade",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "A public API declared once in Rust, written as an idiomatic TypeScript facade over its wasm-bindgen exports, React hooks, a reference, and any binding a plugin adds",
   "license": "MIT",
   "homepage": "https://ignf.github.io/wasm-facade/",
