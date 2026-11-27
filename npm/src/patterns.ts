@@ -10,7 +10,10 @@
  *   constructor, getters and setters (wasm-bindgen's flags), methods (async ones returning a promise), events (a
  *   method with `event = "<name>"` and `payload = "<TypeScript type>"`, taking the listener), callbacks (a
  *   `js_sys::Function` parameter typed by `callback = "<TypeScript type>"`), properties by key (a method
- *   `(key, name, value)` with `keyed = "<struct>"`: each key's properties held by the facade)
+ *   `(key, name, value)` with `keyed = "<struct>"`: each key's properties held by the facade), dependencies
+ *   (`deps = "map: GeoMap, engine: Engine"`: what its constructor takes first, typed by the project's types)
+ * - accessors: a property's names as the configuration's `accessors` writes them, `radius` (properties) or
+ *   `getRadius`/`setRadius` (methods)
  * - emits: `emits = "<event>"` on an options struct or a field (or a keyed method, a settings struct or field), the
  *   event its setter emits once the value is kept and the call made: `{ <field>: value }` (`{ key, name, value }`)
  * - takes: `takes = "<record>, …"` on a function or a method, the parameters named as a record's fields taken as one
@@ -98,9 +101,18 @@ export interface Keyed {
   emits: string | undefined;
 }
 
+/** A dependency of a class: what its constructor takes first, kept for its code and its subclasses */
+export interface Dependency {
+  /** Its name in TypeScript (`map`), its type as the project gives it (`GeoMap`) */
+  name: string;
+  type: string;
+}
+
 export interface Class {
   name: string;
   doc: string;
+  /** Its dependencies, in their order (`deps`) */
+  deps: Dependency[];
   options: Options | undefined;
   ctor: Signature | undefined;
   /** Properties: a getter, and its setter where there is one */
@@ -203,9 +215,21 @@ export const classes = (api: Api): Class[] =>
 
     if (both.length) throw new Error(`wasm-facade: ${c.name}: ${both.join(', ')} both emitted and a wasm event`);
 
+    const deps = (c.deps ?? []).map((d) => ({ name: camel(d.name), type: d.type }));
+    const members = new Set([
+      'options',
+      ...kept.map((k) => k.name),
+      ...methods.map((m) => propertyName(m)),
+      ...methods.map((m) => camel(m.export)),
+    ]);
+    const clash = deps.filter((d) => members.has(d.name)).map((d) => d.name);
+
+    if (clash.length) throw new Error(`wasm-facade: ${c.name}'s deps: ${clash.join(', ')} already a member's name`);
+
     return {
       name: c.name,
       doc: c.doc,
+      deps,
       options: own,
       ctor: methods.find((m) => has(m, 'constructor')),
       properties: methods
@@ -226,6 +250,39 @@ export const classes = (api: Api): Class[] =>
       emitted,
     };
   });
+
+/** A property's getter and setter as the configuration's `accessors` names them: `radius` and `radius` as
+ * properties, `getRadius` and `setRadius` as methods */
+export const accessorNames = (
+  name: string,
+  accessors: 'properties' | 'methods' = 'properties',
+): { getter: string; setter: string } =>
+  accessors === 'methods'
+    ? { getter: `get${upperFirst(name)}`, setter: `set${upperFirst(name)}` }
+    : { getter: name, setter: name };
+
+/** The members of a class its accessors as methods would add (`getRadius`, `setRadius`) that it already has: none to
+ * write twice */
+export const accessorClashes = (c: Class, accessors: 'properties' | 'methods' = 'properties'): string[] => {
+  if (accessors === 'properties') return [];
+
+  const members = new Set([
+    ...c.methods.map((m) => camel(m.export)),
+    ...c.keyed.flatMap((k) => [camel(k.method.export), k.getter]),
+  ]);
+  const properties = [
+    ...c.kept.map((k) => ({ name: k.name, setter: k.setter !== undefined })),
+    ...c.properties
+      .filter((p) => !c.kept.some((k) => k.name === p.name))
+      .map((p) => ({ name: p.name, setter: p.setter !== undefined })),
+  ];
+
+  return properties.flatMap((p) => {
+    const names = accessorNames(p.name, accessors);
+
+    return [names.getter, ...(p.setter ? [names.setter] : [])].filter((n) => members.has(n));
+  });
+};
 
 /** The records a function or a method takes in place of its parameters (`takes = "<record>, …"`): each record's
  * fields the parameters of their names, given as one object */

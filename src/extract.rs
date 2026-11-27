@@ -298,6 +298,54 @@ fn insert(keys: &mut Map<String, Value>, entry: &Meta) {
     keys.insert(key, value);
 }
 
+/// A class's dependencies as its `deps` key writes them, `"map: GeoMap, engine: Engine"`: each a name and the type
+/// the project gives it (TypeScript's, as written), in their order; commas inside `<>`, `()`, `[]`, `{}` are the type's
+///
+/// # Errors
+///
+/// An entry that is not `name: Type`, a name given twice
+pub fn dependencies(text: &str) -> Result<Vec<Value>, String> {
+    let mut entries = Vec::new();
+    let mut depth = 0_i32;
+    let mut start = 0;
+
+    for (i, c) in text.char_indices() {
+        match c {
+            '<' | '(' | '[' | '{' => depth += 1,
+            '>' | ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                entries.push(&text[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    entries.push(&text[start..]);
+
+    let mut deps: Vec<Value> = Vec::new();
+
+    for entry in entries.iter().map(|e| e.trim()).filter(|e| !e.is_empty()) {
+        let (name, ty) = entry
+            .split_once(':')
+            .map(|(n, t)| (n.trim(), t.trim()))
+            .filter(|(n, t)| {
+                !t.is_empty()
+                    && n.chars()
+                        .next()
+                        .is_some_and(|c| c.is_alphabetic() || c == '_')
+                    && n.chars().all(|c| c.is_alphanumeric() || c == '_')
+            })
+            .ok_or_else(|| format!("`{entry}` is not `name: Type`"))?;
+
+        if deps.iter().any(|d| d["name"] == name) {
+            return Err(format!("`{name}` is given twice"));
+        }
+        deps.push(json!({ "name": name, "type": ty }));
+    }
+
+    Ok(deps)
+}
+
 /// The entries of an item's export attributes (`#[wasm_bindgen(…)]`)
 fn export_entries(config: &Config, attrs: &[Attribute]) -> Vec<Meta> {
     attrs
@@ -530,5 +578,33 @@ mod tests {
         assert_eq!(methods.len(), 2);
         assert_eq!(methods[0].0, "addCircles");
         assert_eq!(methods[0].1["params"][1]["type"], "usize");
+    }
+    #[test]
+    fn reads_a_class_s_dependencies_in_their_order_a_type_s_commas_its_own() {
+        let deps = dependencies("map: GeoMap, cache: Map<string, number>,engine:Engine").unwrap();
+
+        assert_eq!(
+            deps,
+            json!([
+                { "name": "map", "type": "GeoMap" },
+                { "name": "cache", "type": "Map<string, number>" },
+                { "name": "engine", "type": "Engine" },
+            ])
+            .as_array()
+            .unwrap()
+            .clone()
+        );
+        assert_eq!(dependencies("").unwrap(), Vec::<Value>::new());
+        assert!(
+            dependencies("map GeoMap")
+                .unwrap_err()
+                .contains("not `name: Type`")
+        );
+        assert!(
+            dependencies("map: A, map: B")
+                .unwrap_err()
+                .contains("given twice")
+        );
+        assert!(dependencies("my map: A").is_err());
     }
 }

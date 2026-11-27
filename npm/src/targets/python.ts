@@ -9,11 +9,14 @@
  * - the functions, each class and each settings struct a mixin (`FunctionsApi`, `BlurApi`, `ViewSettingsApi`): its
  *   methods in snake_case with typed arguments and docstrings, each one handing its call to the class inheriting it
  *   (`_call(name, *args)`, `_get(name)`, `_set(name, value)`, `_on(event, listener)`, described by `Transport`), by
- *   the facade's names (`applyLater`, `setMinZoom`).
+ *   the facade's names (`applyLater`, `setMinZoom`). A class's properties stay Python properties whatever the
+ *   configuration's `accessors`: read and set by `_get`/`_set`, or by `_call("getRadius")`/`_call("setRadius", v)`
+ *   when the facade writes them as methods.
  *
  * What carries the call is the project's: a widget calling the TypeScript facade in a browser, a React Native bridge,
  * or native code. The generated API does not change with it.
  */
+import type { Config } from '../config.ts';
 import {
   type Api,
   camel,
@@ -29,6 +32,7 @@ import {
 } from '../model.ts';
 import {
   type ApiRecord,
+  accessorNames,
   type Class,
   classes,
   converters,
@@ -164,7 +168,14 @@ const optionsPart = (api: Api, types: Types, o: Options): string[] => {
   ];
 };
 
-const classPart = (api: Api, types: Types, c: Class): string[] => {
+const classPart = (api: Api, types: Types, c: Class, accessors: Config['accessors']): string[] => {
+  // A property stays one in Python; read and set by the facade's names: `radius`, or `getRadius`/`setRadius`
+  const get = (name: string) =>
+    accessors === 'methods' ? `self._call("${accessorNames(name, accessors).getter}")` : `self._get("${name}")`;
+  const set = (name: string) =>
+    accessors === 'methods'
+      ? `self._call("${accessorNames(name, accessors).setter}", value)`
+      : `self._set("${name}", value)`;
   const events = [
     ...c.events.map((e) => ({ name: e.name, doc: e.method.doc })),
     ...c.emitted.map((name) => ({ name, doc: 'a property changed by its setter' })),
@@ -175,13 +186,13 @@ const classPart = (api: Api, types: Types, c: Class): string[] => {
       '    @property',
       `    def ${snake(k.name)}(self) -> ${pyTypeOf(api, k.rust, types)}:`,
       ...docstring('        ', k.doc),
-      `        return self._get("${k.name}")`,
+      `        return ${get(k.name)}`,
       ...(k.setter
         ? [
             '',
             `    @${snake(k.name)}.setter`,
             `    def ${snake(k.name)}(self, value: ${pyTypeOf(api, k.rust, types)}) -> None:`,
-            `        self._set("${k.name}", value)`,
+            `        ${set(k.name)}`,
           ]
         : []),
       '',
@@ -192,13 +203,13 @@ const classPart = (api: Api, types: Types, c: Class): string[] => {
         '    @property',
         `    def ${snake(p.name)}(self) -> ${returnType(api, types, p.getter)}:`,
         ...docstring('        ', p.getter.doc),
-        `        return self._get("${p.name}")`,
+        `        return ${get(p.name)}`,
         ...(p.setter
           ? [
               '',
               `    @${snake(p.name)}.setter`,
               `    def ${snake(p.name)}(self, value: ${paramType(api, types, p.setter, p.setter.params[0] ?? { name: 'value', type: 'JsValue' })}) -> None:`,
-              `        self._set("${p.name}", value)`,
+              `        ${set(p.name)}`,
             ]
           : []),
         '',
@@ -361,7 +372,7 @@ const functionsPart = (api: Api, types: Types, name: string): string[] => {
   ];
 };
 
-export const file = (api: Api, own: Context['options']): string => {
+export const file = (api: Api, own: Context['options'], accessors: Config['accessors'] = 'properties'): string => {
   const types = typesOf(own);
   const declared = settings(api, { callKey: option(own, 'call_key', 'call') });
   const structs = [...new Set(declared.map((s) => s.struct))];
@@ -370,7 +381,7 @@ export const file = (api: Api, own: Context['options']): string => {
     ...options(api).flatMap((o) => optionsPart(api, types, o)),
     ...records(api).flatMap((r) => recordPart(api, types, r)),
     ...functionsPart(api, types, option(own, 'functions', 'FunctionsApi')),
-    ...classes(api).flatMap((c) => classPart(api, types, c)),
+    ...classes(api).flatMap((c) => classPart(api, types, c, accessors)),
     ...hosts(api).flatMap((h) => hostPart(api, types, h)),
     ...structs.flatMap((s) =>
       settingsPart(
@@ -434,8 +445,8 @@ export const file = (api: Api, own: Context['options']): string => {
 
 export const python: Target = {
   name: 'python',
-  outputs: ({ api, options: own }: Context): Output[] => [
-    { path: option(own, 'out', 'python/_api.py'), text: file(api, own) },
+  outputs: ({ api, config, options: own }: Context): Output[] => [
+    { path: option(own, 'out', 'python/_api.py'), text: file(api, own, config.accessors) },
   ],
 };
 

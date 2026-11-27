@@ -78,6 +78,12 @@ export const pythonReference: Target = {
         `### \`${c.name}\` (\`${c.name}Api\`)`,
         '',
         ...(c.doc ? [pyDoc(c.doc), ''] : []),
+        ...(c.deps.length
+          ? [
+              `Its dependencies, what the facade's constructor takes first: ${c.deps.map((d) => `\`${snake(d.name)}\` (\`${d.type}\`)`).join(', ')}.`,
+              '',
+            ]
+          : []),
         ...(c.options
           ? [`Its options: \`${c.options.name}\`, \`${snake(c.options.name).replace(/^_/, '')}(…)\`.`, '']
           : []),

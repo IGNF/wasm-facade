@@ -5,6 +5,7 @@
 import type { Config } from '../config.ts';
 import { type Api, camel, type Signature, tsTypeOf } from '../model.ts';
 import {
+  accessorNames,
   type Class,
   classes,
   eventsOf,
@@ -54,52 +55,77 @@ const optionsTable = (api: Api, config: Config, o: Options): string[] => [
   '',
 ];
 
-const classSection = (api: Api, config: Config, c: Class): string[] => [
-  `### \`${c.name}\``,
-  '',
-  ...(c.doc ? [line(c.doc), ''] : []),
-  ...(c.options
-    ? [`\`new ${c.name}(options)\`, its options \`${c.options.name}\`:`, '', ...optionsTable(api, config, c.options)]
-    : []),
-  ...(c.kept.length || c.properties.length
-    ? [
-        'Properties:',
-        '',
-        ...c.kept.map(
-          (k) =>
-            `- \`${k.name}\`${k.setter ? '' : ' (read only)'}: ${line(k.doc)} (the option as kept${k.emits ? `; its setter emits \`${k.emits}\`` : ''})`,
-        ),
-        ...c.properties
-          .filter((p) => !c.kept.some((k) => k.name === p.name))
-          .map((p) => `- \`${p.name}\`${p.setter ? '' : ' (read only)'}: ${line(p.getter.doc)}`),
-        '',
-      ]
-    : []),
-  ...(c.keyed.length
-    ? [
-        'Properties by key:',
-        '',
-        ...c.keyed.map((k) => {
-          const [key, name, value] = k.method.params.map((p) => camel(p.name));
+/** A property as the facade writes it: its name (accessors), or its getter and setter (`accessors = "methods"`) */
+const propertyNamed = (config: Config, name: string, setter: boolean): string => {
+  if (config.accessors !== 'methods') return `\`${name}\`${setter ? '' : ' (read only)'}`;
 
-          return `- \`${camel(k.method.export)}(${key}, ${name}, ${value})\`, \`${k.getter}(${key}, ${name})\`: ${line(k.method.doc)} (\`${k.struct}\`'s, kept by key${k.emits ? `; emits \`${k.emits}\`` : ''})`;
-        }),
-        '',
-      ]
-    : []),
-  ...(c.methods.length
-    ? ['Methods:', '', ...c.methods.map((m) => `- ${signature(api, config, m)}: ${line(m.doc)}`), '']
-    : []),
-  ...(c.events.length || c.emitted.length
-    ? [
-        'Events (`on(type, listener)`, returning what stops it):',
-        '',
-        ...c.events.map((e) => `- \`${e.name}\` (\`${e.payload}\`): ${line(e.method.doc)}`),
-        ...c.emitted.map((e) => `- \`${e}\`: a property changed by its setter, once kept and applied`),
-        '',
-      ]
-    : []),
-];
+  const names = accessorNames(name, 'methods');
+
+  return setter ? `\`${names.getter}()\`, \`${names.setter}(value)\`` : `\`${names.getter}()\` (read only)`;
+};
+
+const classSection = (api: Api, config: Config, c: Class): string[] => {
+  const given = [...c.deps.map((d) => d.name), ...(c.options ? ['options'] : [])].join(', ');
+
+  return [
+    `### \`${c.name}\``,
+    '',
+    ...(c.doc ? [line(c.doc), ''] : []),
+    ...(c.deps.length
+      ? [
+          `\`new ${c.name}(${given})\`, its dependencies first (required, kept by the instance):`,
+          '',
+          ...c.deps.map((d) => `- \`${d.name}\`: \`${d.type}\``),
+          '',
+        ]
+      : []),
+    ...(c.options
+      ? [
+          `${c.deps.length ? 'Its' : `\`new ${c.name}(options)\`, its`} options \`${c.options.name}\`:`,
+          '',
+          ...optionsTable(api, config, c.options),
+        ]
+      : []),
+    ...(c.kept.length || c.properties.length
+      ? [
+          'Properties:',
+          '',
+          ...c.kept.map(
+            (k) =>
+              `- ${propertyNamed(config, k.name, k.setter !== undefined)}: ${line(k.doc)} (the option as kept${k.emits ? `; its setter emits \`${k.emits}\`` : ''})`,
+          ),
+          ...c.properties
+            .filter((p) => !c.kept.some((k) => k.name === p.name))
+            .map((p) => `- ${propertyNamed(config, p.name, p.setter !== undefined)}: ${line(p.getter.doc)}`),
+          '',
+        ]
+      : []),
+    ...(c.keyed.length
+      ? [
+          'Properties by key:',
+          '',
+          ...c.keyed.map((k) => {
+            const [key, name, value] = k.method.params.map((p) => camel(p.name));
+
+            return `- \`${camel(k.method.export)}(${key}, ${name}, ${value})\`, \`${k.getter}(${key}, ${name})\`: ${line(k.method.doc)} (\`${k.struct}\`'s, kept by key${k.emits ? `; emits \`${k.emits}\`` : ''})`;
+          }),
+          '',
+        ]
+      : []),
+    ...(c.methods.length
+      ? ['Methods:', '', ...c.methods.map((m) => `- ${signature(api, config, m)}: ${line(m.doc)}`), '']
+      : []),
+    ...(c.events.length || c.emitted.length
+      ? [
+          'Events (`on(type, listener)`, returning what stops it):',
+          '',
+          ...c.events.map((e) => `- \`${e.name}\` (\`${e.payload}\`): ${line(e.method.doc)}`),
+          ...c.emitted.map((e) => `- \`${e}\`: a property changed by its setter, once kept and applied`),
+          '',
+        ]
+      : []),
+  ];
+};
 
 export const reference: Target = {
   name: 'reference',

@@ -10,7 +10,8 @@
 //! - an enum: its variants (a union of strings in TypeScript)
 //! - a `pub fn` exported by wasm-bindgen: a free function, its parameters, its result, whether it is async
 //! - an `impl` block exported by wasm-bindgen: a class, its methods (constructor, getters, setters, async), each with
-//!   its own keys
+//!   its own keys; its dependencies (`deps = "map: GeoMap, engine: Engine"`, the types the project's) read into
+//!   `deps`, a name and a type each, in their order
 //!
 //! The calls a declaration names by its `call_keys` are resolved among the exported methods of the `exported` classes
 //! (by their `export_name`, `js_name`): a call named but not exported, or exported twice, is an error naming the
@@ -25,7 +26,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub use extract::{exported_calls, items};
+pub use extract::{dependencies, exported_calls, items};
 pub use workspace::{Workspace, workspace};
 
 /// The version of the file's format (`data/api.schema.json`)
@@ -128,7 +129,7 @@ impl Config {
 ///
 /// # Errors
 ///
-/// An item declared twice, a call named and not exported or exported twice
+/// An item declared twice, a call named and not exported or exported twice, a class's `deps` not `name: Type, …`
 pub fn api(config: &Config, root: &Path, files: &[(PathBuf, syn::File)]) -> Result<Value, String> {
     let shown = |path: &Path| {
         path.strip_prefix(root)
@@ -160,7 +161,23 @@ pub fn api(config: &Config, root: &Path, files: &[(PathBuf, syn::File)]) -> Resu
         }
     }
 
-    let declared: Vec<Value> = declared.into_values().map(|(item, _)| item).collect();
+    let mut declared: Vec<Value> = declared.into_values().map(|(item, _)| item).collect();
+
+    // A class's dependencies (`deps = "map: GeoMap, …"`), read once here for every binding: its constructor takes them
+    for item in &mut declared {
+        let text = match (&item["kind"], &item["api"]["deps"]) {
+            (Value::String(kind), Value::String(text)) if kind == "class" => text.clone(),
+            _ => continue,
+        };
+        let deps = dependencies(&text).map_err(|e| {
+            format!(
+                "`{}`'s deps: {e}",
+                item["name"].as_str().unwrap_or_default()
+            )
+        })?;
+
+        item["deps"] = json!(deps);
+    }
     let mut calls = Map::new();
 
     for (name, by) in call_names(config, &declared) {
@@ -305,6 +322,36 @@ mod tests {
         let error = api(&config, Path::new("/"), &[(PathBuf::from("/a.rs"), file)]).unwrap_err();
 
         assert!(error.contains("names the call `addDots`"), "{error}");
+    }
+
+    #[test]
+    fn a_class_s_dependencies_are_read_into_the_file_a_wrong_one_an_error() {
+        let config = Config::from_json(&json!({ "cfg": "my_api" })).unwrap();
+        let file = |deps: &str| {
+            syn::parse_str(&format!(
+                "#[cfg_attr(my_api, api(class, deps = \"{deps}\"))] #[wasm_bindgen] impl Layer {{}}"
+            ))
+            .unwrap()
+        };
+        let read = api(
+            &config,
+            Path::new("/"),
+            &[(PathBuf::from("/a.rs"), file("map: GeoMap"))],
+        )
+        .unwrap();
+        let error = api(
+            &config,
+            Path::new("/"),
+            &[(PathBuf::from("/a.rs"), file("map"))],
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            read["items"][0]["deps"],
+            json!([{ "name": "map", "type": "GeoMap" }])
+        );
+        assert_eq!(read["items"][0]["api"]["deps"], "map: GeoMap");
+        assert_eq!(error, "`Layer`'s deps: `map` is not `name: Type`");
     }
 
     #[test]

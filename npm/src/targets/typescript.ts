@@ -4,7 +4,7 @@
  * them, their parameters through the project's converters, events as `on(type, listener)` returning what stops it
  */
 import { dirname, relative } from 'node:path';
-import type { Config } from '../config.ts';
+import { type Config, typeImports } from '../config.ts';
 import {
   type Api,
   camel,
@@ -19,6 +19,8 @@ import {
 } from '../model.ts';
 import {
   type ApiRecord,
+  accessorClashes,
+  accessorNames,
   type Class,
   classes,
   converters,
@@ -235,23 +237,58 @@ const keyedCode = (api: Api, config: Config, k: Keyed, events: string): string[]
   ];
 };
 
+/** A property's getter or setter: an accessor (`get radius()`, `set radius(value)`) or a method (`getRadius()`,
+ * `setRadius(value)`), as the configuration's `accessors` says */
+const accessorCode = (
+  accessors: Config['accessors'],
+  kind: 'get' | 'set',
+  name: string,
+  type: string,
+  body: string[],
+): string[] => {
+  const names = accessorNames(name, accessors);
+  const heads = {
+    methods: { get: `  ${names.getter}(): ${type} {`, set: `  ${names.setter}(value: ${type}): void {` },
+    properties: { get: `  get ${name}(): ${type} {`, set: `  set ${name}(value: ${type}) {` },
+  };
+  const head = heads[accessors][kind];
+
+  return [head, ...body.map((line) => `    ${line}`), '  }'];
+};
+
 const classCode = (api: Api, config: Config, c: Class): string[] => {
   const ctor = c.ctor;
   const own = c.options;
   const events = eventsName(c);
+  const accessors = config.accessors ?? 'properties';
   const typeOf = (rust: string) => tsTypeOf(api, rust, config.types);
+  const clashes = accessorClashes(c, accessors);
+
+  if (clashes.length)
+    throw new Error(
+      `wasm-facade: ${c.name}: ${clashes.join(', ')} both an accessor (accessors = "methods") and a method`,
+    );
+
+  // The constructor's parameters: an option's from the copy kept, a dependency's as given
   const ctorArgs = ctor
     ? ctor.params.map((p) => {
         const field = own?.fields.find((f) => f.name === camel(p.name));
-        const value = field ? `this.#options.${field.name}` : camel(p.name);
+        const dep = c.deps.find((d) => d.name === camel(p.name));
+        const given = dep ? `this.${dep.name}` : camel(p.name);
+        const value = field ? `this.#options.${field.name}` : given;
         const union = unions(api).find((u) => u.name === p.type);
 
         return union ? `${unionValues(union)}[${value}]` : value;
       })
     : [];
+  const depsGiven = c.deps.map((d) => `${d.name}: ${d.type}`);
+  const depsKept = c.deps.map((d) => `    this.${d.name} = ${d.name};`);
+  // Without options, the wasm constructor is given its dependencies when they are all it takes
+  const plainArgs = ctor?.params.every((p) => c.deps.some((d) => d.name === camel(p.name))) ? ctorArgs : [];
   const construct = own
     ? [
-        `  constructor(options: ${initName(own)} = {}) {`,
+        `  constructor(${[...depsGiven, `options: ${initName(own)} = {}`].join(', ')}) {`,
+        ...depsKept,
         '    this.#options = Object.freeze({',
         ...own.fields.map(
           (f) =>
@@ -261,7 +298,12 @@ const classCode = (api: Api, config: Config, c: Class): string[] => {
         `    this.#inner = new wasm.${c.name}(${ctorArgs.join(', ')});`,
         '  }',
       ]
-    : ['  constructor() {', `    this.#inner = new wasm.${c.name}();`, '  }'];
+    : [
+        `  constructor(${depsGiven.join(', ')}) {`,
+        ...depsKept,
+        `    this.#inner = new wasm.${c.name}(${plainArgs.join(', ')});`,
+        '  }',
+      ];
   // The options kept: each read from the copy; its setter keeps the value, makes the call, emits
   const kept = c.kept.flatMap((k) => {
     const type = typeOf(k.rust);
@@ -271,18 +313,16 @@ const classCode = (api: Api, config: Config, c: Class): string[] => {
     return [
       '',
       tsDoc(k.doc, '  '),
-      `  get ${k.name}(): ${type} {`,
-      `    return ${keptValue(api, type, `this.#options.${k.name}`)};`,
-      '  }',
+      ...accessorCode(accessors, 'get', k.name, type, [`return ${keptValue(api, type, `this.#options.${k.name}`)};`]),
       ...(k.setter
         ? [
             '',
             tsDoc(k.setter.doc || k.doc, '  '),
-            `  set ${k.name}(value: ${type}) {`,
-            `    this.#options = Object.freeze({ ...this.#options, ${k.name}: ${keptValue(api, type, 'value')} });`,
-            `    this.#inner.${k.name} = ${passed};`,
-            ...(k.emits ? [`    this.#emit('${k.emits}', { ${k.name}: value });`] : []),
-            '  }',
+            ...accessorCode(accessors, 'set', k.name, type, [
+              `this.#options = Object.freeze({ ...this.#options, ${k.name}: ${keptValue(api, type, 'value')} });`,
+              `this.#inner.${k.name} = ${passed};`,
+              ...(k.emits ? [`this.#emit('${k.emits}', { ${k.name}: value });`] : []),
+            ]),
           ]
         : []),
     ];
@@ -295,16 +335,12 @@ const classCode = (api: Api, config: Config, c: Class): string[] => {
       return [
         '',
         tsDoc(p.getter.doc, '  '),
-        `  get ${p.name}(): ${type} {`,
-        `    return this.#inner.${p.name};`,
-        '  }',
+        ...accessorCode(accessors, 'get', p.name, type, [`return this.#inner.${p.name};`]),
         ...(p.setter
           ? [
               '',
               tsDoc(p.setter.doc || p.getter.doc, '  '),
-              `  set ${p.name}(value: ${type}) {`,
-              `    this.#inner.${p.name} = value;`,
-              '  }',
+              ...accessorCode(accessors, 'set', p.name, type, [`this.#inner.${p.name} = value;`]),
             ]
           : []),
       ];
@@ -394,6 +430,10 @@ const classCode = (api: Api, config: Config, c: Class): string[] => {
       : []),
     tsDoc(c.doc),
     `export class ${c.name} {`,
+    ...c.deps.flatMap((d) => [
+      `  /** A dependency, given to the constructor: the generated code's and its subclasses' */`,
+      `  protected readonly ${d.name}: ${d.type};`,
+    ]),
     `  readonly #inner: wasm.${c.name};`,
     ...(own ? [`  #options: Readonly<${own.name}>;`] : []),
     ...c.keyed.map(
@@ -644,14 +684,7 @@ export const facade = (api: Api, config: Config, out: string): string => {
     )
     .map((r) => r.name);
 
-  return joined([
-    `// ${HEADER_OF('typescript')}`,
-    '',
-    ...(usesConverters && config.converters
-      ? [`import * as convert from '${specifier(out, config.converters)}';`]
-      : []),
-    `import * as wasm from '${wasm}';`,
-    '',
+  const body = joined([
     ...(keeps ? keptCode : []),
     ...(checked.size ? mismatchCode : []),
     ...unions(api).flatMap(unionCode),
@@ -664,6 +697,18 @@ export const facade = (api: Api, config: Config, out: string): string => {
       ...(buffered.includes(r.name) ? buffersCode(r) : []),
     ]),
     ...hosts(api).flatMap((h) => hostCode(api, config, h)),
+  ]);
+
+  return joined([
+    `// ${HEADER_OF('typescript')}`,
+    '',
+    ...(usesConverters && config.converters
+      ? [`import * as convert from '${specifier(out, config.converters)}';`]
+      : []),
+    ...typeImports(config, out, body),
+    `import * as wasm from '${wasm}';`,
+    '',
+    body,
   ]);
 };
 

@@ -111,7 +111,8 @@ own patterns read theirs.
 | an options struct or one of its fields | `emits = "change"` | the class's setter of that option emits `change` once the value is kept and the call made: `{ radius: 3 }`, typed in `BlurEvents`, heard by `on` |
 | `#[wasm_bindgen] pub fn histogram(…)` | `function` | `histogram(…)` |
 | `#[wasm_bindgen] impl Blur { … }` | `class`, `options = "BlurOptions"` | `class Blur`: `new Blur({ radius })` (the constructor's parameters taken from the options by name), its methods, `free()`; the options kept by the facade, each a property read from that copy (never from wasm; objects and arrays frozen, typed arrays copied), its wasm-bindgen setter keeping the value then making the call |
-| `#[wasm_bindgen(getter)]` / `(setter)` | (wasm-bindgen's) | `get radius()` / `set radius(v)` |
+| the `impl` block of a class | `deps = "map: GeoMap, engine: Engine"` (names and the project's TypeScript types, in order) | `new Layer(map, engine, options)`: its dependencies taken first, typed and required, kept in `protected readonly` fields (below) |
+| `#[wasm_bindgen(getter)]` / `(setter)` | (wasm-bindgen's) | `get radius()` / `set radius(v)`, or `getRadius()` / `setRadius(v)` with `accessors = "methods"` (below) |
 | `pub async fn` | | returns `Promise<…>` |
 | a `js_sys::Function` parameter | `callback = "(row: number) => boolean"` | that parameter typed so |
 | a method taking a listener | `event = "progress"`, `payload = "number"` | `on('progress', listener)`, returning what stops it |
@@ -143,6 +144,8 @@ own types in `[types]`.
 | `[extract]` `export_attribute`, `export_name` | `wasm_bindgen`, `js_name` | how an export is recognized and named |
 | `[extract]` `members` | `"all"` | the members read, their folders |
 | `[types]` | | the project's Rust types in TypeScript (`Rgba = "[number, number, number, number]"`) |
+| `accessors` | `"properties"` | how a class's properties are written: `get radius()` / `set radius(v)`, or `"methods"`: `getRadius()` / `setRadius(v)` |
+| `[imports]` | | the project's TypeScript types the generated code names (a class's `deps`), by name: their module, a file from the root with its extension (`GeoMap = "src/map.ts"`) or a package as written (`Engine = "@my/engine"`); imported as types where used |
 | `inputs` | none | files the plugins read besides their modules, in `generate`'s stamp |
 | `cache` | `node_modules/.cache/wasm-facade` | where `generate` keeps its stamp |
 | `[format]` | none | a formatter per extension, the text on its stdin (`".ts" = ["biome", "format", "--stdin-file-path={name}"]`) |
@@ -165,6 +168,68 @@ from the same `api.json`:
 | `python-reference` | the Python reference (`docs/python.md`; `title`, `types`) | |
 
 The targets reading settings take `call_key`, the key naming their call (`call` by default).
+
+### Accessors: properties or methods
+
+A class's properties (its options kept by the facade, wasm-bindgen's getters and setters) are accessors by default.
+A project whose style is a pair of methods says so once, in `wasm-facade.toml`:
+
+```toml
+accessors = "methods"
+```
+
+```ts
+// accessors = "properties" (the default)        // accessors = "methods"
+blur.radius = 3;                                 blur.setRadius(3);
+blur.radius; // 3                                blur.getRadius(); // 3
+```
+
+The behaviour is the same: read from the facade's copy, the setter keeping the value, making the wasm call, then
+emitting its event. Properties by key stay `setXProperty` / `getXProperty`. React Native lists the pairs among the
+methods (`BLUR_PROPERTIES` empty); the reference names them; Python keeps properties (`blur.radius = 3`, its idiom),
+its transport called by the facade's names (`_call("setRadius", 3)` in place of `_set("radius", 3)`). The web
+component's attributes do not change. A method already named as an accessor would be (`getRadius`) is an error.
+
+### Dependencies: what a class's constructor takes first
+
+A class that needs objects of the project (a map, an engine) declares them on its `impl` block, the types those the
+TypeScript side names, and where they come from in `[imports]`:
+
+```rust
+#[cfg_attr(wasm_facade, api(class, options = "LayerOptions", deps = "map: GeoMap, engine: Engine"))]
+#[wasm_bindgen]
+impl Layer {
+    #[wasm_bindgen(constructor)]
+    pub fn new(engine: &Engine, opacity: f64) -> Layer { … } // a parameter named as a dependency is given it
+}
+```
+
+```toml
+[imports]
+GeoMap = "src/map.ts"
+Engine = "@my/engine"
+```
+
+```ts
+// api.ts, generated
+import type { GeoMap } from './map.ts';
+import type { Engine } from '@my/engine';
+
+export class Layer {
+  protected readonly map: GeoMap;
+  protected readonly engine: Engine;
+  constructor(map: GeoMap, engine: Engine, options: LayerOptionsInit = {}) { this.map = map; this.engine = engine; … }
+}
+
+// labels.ts, by hand: a subclass uses them
+export class Labels extends Layer { redraw() { this.map.requestRender(); } }
+```
+
+Dependencies arrive in the constructor, typed and required, never set afterwards; `protected readonly` and not
+`#private`, so that a hand-written subclass reads them. The extractor reads `deps` into the class's `deps` in
+`api.json` (a name and a type each, in their order; a text that is not `name: Type, …` an error); React's
+`useLayer(map, engine, options)` takes them first and makes the instance again when one changes; the references list
+them. Python's mixins and React Native's names construct nothing: they do not change.
 
 ### Hosts: classes written by hand, declared in Rust
 

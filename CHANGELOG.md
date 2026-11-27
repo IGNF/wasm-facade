@@ -32,6 +32,18 @@
   one object of it (Python a dict), a record of typed arrays its buffers listed to transfer it (`<record>Buffers`).
 - Records returned: `returns = "<record>"` on a function or a method returning a `JsValue` types its result as that
   record and checks it (`checked<Record>`: a `TypeError` naming the field not as declared).
+- Accessors as methods: `accessors = "methods"` in `wasm-facade.toml` (default `"properties"`) writes each property of
+  a class as `getRadius()` / `setRadius(value)` in place of `get radius()` / `set radius(value)`, with the same
+  behaviour (the copy kept, the call made, the event emitted); React Native lists them among the methods, the
+  reference names them, Python keeps properties and calls the facade's names (`_call("setRadius", value)`). A member
+  already named as an accessor would be is an error.
+- Dependencies: `deps = "map: GeoMap, engine: Engine"` on a class's `impl` block, read by the extractor into the
+  class's `deps` in `api.json` (schema 1 still: a reader ignoring it reads the rest; a text not `name: Type, …` an
+  error). The facade's constructor takes them first, typed and required (`new Layer(map, engine, options)`), kept in
+  `protected readonly` fields for the generated code and the hand-written subclasses; a wasm constructor's parameter
+  named as one is given it. `[imports]` in `wasm-facade.toml` names each type's module (`GeoMap = "src/map.ts"`, a
+  package as written), imported as a type where the generated code names it. React's hooks take them first; the
+  references list them.
 
 ### Changed
 

@@ -474,6 +474,176 @@ test('takes, keyed and returns name what is declared, in the shape they need', (
   assert.throws(() => returned(drawn, method('bad', [], { returns: 'LineStyle' })), /no struct declared record/);
 });
 
+test('accessors as methods: getColor and setColor over the copy kept, the same calls and events, every target named so', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'wasm-facade-'));
+  const config = {
+    wasm: './wasm.js',
+    types: { Anchor: '{ x: number; y: number }' },
+    accessors: 'methods',
+    imports: {},
+  } as unknown as Config;
+  const text = facade(drawn, config, 'api.ts');
+
+  assert.ok(text.includes('  getColor(): string {'));
+  assert.ok(text.includes('  setColor(value: string): void {'));
+  assert.ok(!text.includes('get color()'));
+  writeFileSync(join(dir, 'wasm.js'), FAKE_WASM);
+  writeFileSync(join(dir, 'api.ts'), text);
+
+  const wasm = (await import(join(dir, 'wasm.js'))) as { made: { log: unknown[][] }[] };
+  const { Line } = await import(join(dir, 'api.ts'));
+  const line = new Line({ color: 'red' });
+  const events: unknown[] = [];
+
+  line.on('restyle', (e: unknown) => events.push(e));
+  assert.equal(line.getColor(), 'red');
+  line.setColor('blue');
+  assert.equal(line.getColor(), 'blue');
+  assert.ok(Object.isFrozen(line.getAnchor()));
+  assert.deepEqual(wasm.made.at(-1)?.log.at(-1), ['color', 'blue']);
+  assert.deepEqual(events, [{ color: 'blue' }]);
+  assert.equal(line.color, undefined);
+
+  // The other targets name them so: React Native among the methods, the reference by their pair, Python by its calls
+  const out = (name: string) =>
+    BUILT_IN[name]?.outputs({ api: drawn, config, options: { types: { Anchor: 'Any' } } })[0]?.text ?? '';
+
+  assert.ok(
+    out('react-native').includes(
+      "LINE_METHODS = ['getColor', 'setColor', 'getAnchor', 'setAnchor', 'getDashes', 'setDashes', 'setLabelProperty'",
+    ),
+  );
+  assert.ok(out('react-native').includes('LINE_PROPERTIES = [] as const'));
+  assert.ok(out('reference').includes('- `getColor()`, `setColor(value)`: '));
+  assert.ok(out('python').includes('    def color(self) -> str:'));
+  assert.ok(out('python').includes('        return self._call("getColor")'));
+  assert.ok(out('python').includes('        self._call("setColor", value)'));
+
+  // A method already named as an accessor would be: refused, not written twice
+  const clashing = checkedApi({
+    ...drawn,
+    items: drawn.items.map((item) =>
+      item.name === 'Line' ? { ...item, methods: [...(item.methods ?? []), method('get_color', [])] } : item,
+    ),
+  });
+
+  assert.throws(() => facade(clashing, config, 'api.ts'), /getColor both an accessor/);
+  assert.doesNotThrow(() => facade(clashing, { ...config, accessors: 'properties' }, 'api.ts'));
+});
+
+/** A class taking its dependencies: `deps = "map: GeoMap, engine: Engine"`, the wasm constructor given `engine` */
+const layered = checkedApi({
+  ...drawn,
+  items: [
+    ...drawn.items,
+    {
+      kind: 'class',
+      name: 'Layer',
+      doc: '',
+      api: { class: true, options: 'LineStyle', deps: 'map: GeoMap, engine: Engine' },
+      deps: [
+        { name: 'map', type: 'GeoMap' },
+        { name: 'engine', type: 'Engine' },
+      ],
+      methods: [
+        method(
+          'new',
+          [
+            ['engine', '&Engine'],
+            ['color', 'String'],
+          ],
+          {},
+          ['constructor'],
+        ),
+        method('set_color', [['color', 'String']], {}, ['setter']),
+      ],
+    },
+    {
+      kind: 'class',
+      name: 'Probe',
+      doc: '',
+      api: { class: true, deps: 'map: GeoMap' },
+      deps: [{ name: 'map', type: 'GeoMap' }],
+      methods: [],
+    },
+  ],
+});
+const LAYER_WASM = `${FAKE_WASM}
+export class Layer extends Line {}
+export class Probe { constructor(...args) { this.args = args; } free() {} }
+`;
+
+test('dependencies taken by the constructor: first, typed, required, kept protected for the subclasses', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'wasm-facade-'));
+  const config = {
+    wasm: './wasm.js',
+    types: { Anchor: '{ x: number; y: number }' },
+    imports: { GeoMap: 'src/map.ts', Engine: '@isard/engine', Unused: 'src/unused.ts' },
+  } as unknown as Config;
+  const text = facade(layered, config, 'src/api.ts');
+
+  assert.ok(text.includes("import type { GeoMap } from './map.ts';"));
+  assert.ok(text.includes("import type { Engine } from '@isard/engine';"));
+  assert.ok(!text.includes('Unused'));
+  assert.ok(text.includes('  protected readonly map: GeoMap;'));
+  assert.ok(text.includes('  constructor(map: GeoMap, engine: Engine, options: LineStyleInit = {}) {'));
+  assert.ok(text.includes('    this.#inner = new wasm.Layer(this.engine, this.#options.color);'));
+  assert.ok(text.includes('  constructor(map: GeoMap) {'));
+
+  // Run: the types given as the project's (here declared beside the facade), a subclass reading its dependency
+  mkdirSync(join(dir, 'src'));
+  writeFileSync(join(dir, 'src/wasm.js'), LAYER_WASM);
+  writeFileSync(
+    join(dir, 'src/api.ts'),
+    `${facade(layered, { ...config, imports: {} } as Config, 'src/api.ts')}
+export interface GeoMap { name: string }
+export interface Engine { id: number }
+export class Labels extends Layer {
+  mapName(): string { return this.map.name; }
+}
+`,
+  );
+
+  const wasm = (await import(join(dir, 'src/wasm.js'))) as { made: { log: unknown[][] }[] };
+  const { Labels, Probe } = await import(join(dir, 'src/api.ts'));
+  const engine = { id: 1 };
+  const labels = new Labels({ name: 'plan' }, engine, { color: 'red' });
+
+  assert.equal(labels.mapName(), 'plan');
+  assert.deepEqual(wasm.made.at(-1)?.log[0], ['new', engine, 'red']);
+  assert.deepEqual(new Probe({ name: 'plan' }).map, { name: 'plan' });
+
+  // React takes them first, and makes the instance again when one changes; the references list them
+  const out = (name: string) =>
+    BUILT_IN[name]?.outputs({ api: layered, config, options: { types: { Anchor: 'Any' } } })[0]?.text ?? '';
+
+  assert.ok(out('react').includes("import type { GeoMap } from './map.ts';"));
+  assert.ok(
+    out('react').includes(
+      'export const useLayer = (map: GeoMap, engine: Engine, options: LineStyleInit = {}): Layer => {',
+    ),
+  );
+  assert.ok(
+    out('react').includes('new Layer(map, engine, { color, anchor, dashes }), [map, engine, color, anchor, dashes]'),
+  );
+  assert.ok(out('react').includes('useMemo(() => new Probe(map), [map])'));
+  assert.ok(out('reference').includes('`new Layer(map, engine, options)`, its dependencies first'));
+  assert.ok(out('reference').includes('- `engine`: `Engine`'));
+  assert.ok(out('python-reference').includes('`map` (`GeoMap`), `engine` (`Engine`)'));
+
+  // A dependency named as a member is refused
+  const clashing = checkedApi({
+    ...layered,
+    items: layered.items.map((item) =>
+      item.name === 'Probe'
+        ? { ...item, deps: [{ name: 'free_all', type: 'X' }], methods: [method('free_all', [])] }
+        : item,
+    ),
+  });
+
+  assert.throws(() => classes(clashing), /Probe's deps: freeAll already a member's name/);
+});
+
 test('Rust in Python: hints, literals, documentation in snake_case', () => {
   assert.equal(pyTypeOf(api, 'Option<f64>'), 'float | None');
   assert.equal(pyTypeOf(api, '&mut [u8]'), 'bytes | Sequence[int]');
@@ -496,6 +666,10 @@ test("the configuration's defaults where its file says nothing", () => {
   assert.equal(config.api, 'wasm-facade/api.json');
   assert.deepEqual(config.extract, { out: 'wasm-facade/api.json' });
   assert.deepEqual(Object.keys(config.targets), ['typescript']);
+  assert.equal(config.accessors, 'properties');
+  assert.deepEqual(config.imports, {});
+  writeFileSync(join(dir, 'wasm-facade.toml'), 'accessors = "fields"\n');
+  assert.throws(() => configOf(dir), /accessors is "properties" or "methods"/);
 });
 
 test("a plugin in TypeScript, loaded from the repository's root", async () => {
