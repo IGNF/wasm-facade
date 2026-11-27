@@ -642,6 +642,35 @@ export class Labels extends Layer {
   });
 
   assert.throws(() => classes(clashing), /Probe's deps: freeAll already a member's name/);
+
+  // A constructor's parameter neither an option nor a dependency is refused, named
+  const unknown = checkedApi({
+    ...layered,
+    items: layered.items.map((item) =>
+      item.name === 'Probe'
+        ? {
+            ...item,
+            methods: [
+              method(
+                'new',
+                [
+                  ['map', 'GeoMap'],
+                  ['tile_size', 'u32'],
+                ],
+                {},
+                ['constructor'],
+              ),
+            ],
+          }
+        : item,
+    ),
+  });
+
+  assert.throws(
+    () => classes(unknown),
+    /Probe's constructor takes tileSize: neither an option \(the class has no options = "…"\) nor a dependency/,
+  );
+  assert.throws(() => facade(unknown, config, 'src/api.ts'), /Probe's constructor takes tileSize/);
 });
 
 test('Rust in Python: hints, literals, documentation in snake_case', () => {

@@ -226,12 +226,23 @@ export const classes = (api: Api): Class[] =>
 
     if (clash.length) throw new Error(`wasm-facade: ${c.name}'s deps: ${clash.join(', ')} already a member's name`);
 
+    // The constructor's parameters: each an option (given from the copy kept) or a dependency (given as taken)
+    const ctor = methods.find((m) => has(m, 'constructor'));
+    const unknown = (ctor?.params ?? [])
+      .map((p) => camel(p.name))
+      .filter((p) => !own?.fields.some((f) => f.name === p) && !deps.some((d) => d.name === p));
+
+    if (unknown.length)
+      throw new Error(
+        `wasm-facade: ${c.name}'s constructor takes ${unknown.join(', ')}: neither ${optionsName ? `an option of ${optionsName}` : 'an option (the class has no options = "…")'} nor a dependency (deps = "…")`,
+      );
+
     return {
       name: c.name,
       doc: c.doc,
       deps,
       options: own,
-      ctor: methods.find((m) => has(m, 'constructor')),
+      ctor,
       properties: methods
         .filter((m) => has(m, 'getter'))
         .map((getter) => ({

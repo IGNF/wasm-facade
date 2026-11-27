@@ -274,8 +274,8 @@ const classCode = (api: Api, config: Config, c: Class): string[] => {
     ? ctor.params.map((p) => {
         const field = own?.fields.find((f) => f.name === camel(p.name));
         const dep = c.deps.find((d) => d.name === camel(p.name));
-        const given = dep ? `this.${dep.name}` : camel(p.name);
-        const value = field ? `this.#options.${field.name}` : given;
+        // Each parameter is an option or a dependency (`classes` refuses any other)
+        const value = field ? `this.#options.${field.name}` : `this.${dep?.name}`;
         const union = unions(api).find((u) => u.name === p.type);
 
         return union ? `${unionValues(union)}[${value}]` : value;
@@ -283,8 +283,6 @@ const classCode = (api: Api, config: Config, c: Class): string[] => {
     : [];
   const depsGiven = c.deps.map((d) => `${d.name}: ${d.type}`);
   const depsKept = c.deps.map((d) => `    this.${d.name} = ${d.name};`);
-  // Without options, the wasm constructor is given its dependencies when they are all it takes
-  const plainArgs = ctor?.params.every((p) => c.deps.some((d) => d.name === camel(p.name))) ? ctorArgs : [];
   const construct = own
     ? [
         `  constructor(${[...depsGiven, `options: ${initName(own)} = {}`].join(', ')}) {`,
@@ -301,7 +299,7 @@ const classCode = (api: Api, config: Config, c: Class): string[] => {
     : [
         `  constructor(${depsGiven.join(', ')}) {`,
         ...depsKept,
-        `    this.#inner = new wasm.${c.name}(${plainArgs.join(', ')});`,
+        `    this.#inner = new wasm.${c.name}(${ctorArgs.join(', ')});`,
         '  }',
       ];
   // The options kept: each read from the copy; its setter keeps the value, makes the call, emits

@@ -52,6 +52,8 @@
 ### Fixed
 
 - `kebab` of a capitalized name has no leading dash (`Preview`: `preview`).
+- A wasm constructor's parameter that is neither an option of the class nor a dependency stops the generation with an
+  error naming the class and the parameter, no longer passed on as an undefined name (or left out without options).
 
 ## [0.2.1] - 2026-11-26
 
