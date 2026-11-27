@@ -127,7 +127,7 @@ export const typeImports = (config: Pick<Config, 'imports'>, from: string, code:
   const modules = new Map<string, string[]>();
 
   for (const [name, module] of Object.entries(config.imports ?? {}))
-    if (new RegExp(`(?<![\\w$.])${name.replace(/[$]/g, '\\$')}(?![\\w$])`).test(named))
+    if (new RegExp(`(?<![\\w$.])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`).test(named))
       modules.set(module, [...(modules.get(module) ?? []), name]);
 
   return [...modules].map(([module, names]) => {
